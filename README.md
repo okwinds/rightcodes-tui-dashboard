@@ -1,6 +1,6 @@
 # Right.codes CLI Dashboard
 
-把 `https://right.codes/dashboard` 的用量/套餐信息做成一个本地 CLI/TUI 看板（可配置刷新频率），尽量不依赖浏览器、**不使用 Playwright 自动化登录**。
+把 `right codes` 的用量/套餐信息做成一个本地 CLI/TUI 看板（可配置刷新频率），尽量不依赖浏览器、**不使用 Playwright 自动化登录**。
 
 > 说明：本项目通过网页同款的 JSON 接口获取数据（需要 Bearer token）。接口可能随网站更新而变动；本工具尽量做兼容与降级提示，但不保证长期稳定。
 
