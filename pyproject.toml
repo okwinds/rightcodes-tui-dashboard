@@ -9,6 +9,7 @@ description = "Right.codes CLI + TUI dashboard (personal usage stats) without Pl
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
+urls = { "Repository" = "https://github.com/okwinds/rightcodes-tui-dashboard", "Issues" = "https://github.com/okwinds/rightcodes-tui-dashboard/issues" }
 dependencies = [
   "httpx>=0.25",
   "textual>=0.58",
