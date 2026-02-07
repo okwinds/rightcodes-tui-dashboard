@@ -25,6 +25,9 @@
 （当你已经发布到 PyPI 后）
 
 ```bash
+pip install -U rightcodes-tui-dashboard
+
+# 或（等价）
 python3 -m pip install -U rightcodes-tui-dashboard
 ```
 
