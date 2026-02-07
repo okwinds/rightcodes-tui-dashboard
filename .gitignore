@@ -1,0 +1,20 @@
+# macOS Finder metadata
+.DS_Store
+
+# Repo-local agent instructions (keep local; do not commit)
+/AGENTS.md
+
+# Local docs index (keep local; do not commit)
+/DOCS_INDEX.md
+
+# Local templates copy (keep local; do not commit)
+/templates/
+
+# Local-only runtime/cache data (may contain tokens; must not be committed)
+.local/
+
+# pytest cache
+.pytest_cache/
+
+# Python packaging/build metadata
+*.egg-info/
