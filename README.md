@@ -121,22 +121,6 @@ python3 -m pytest
 rightcodes --help
 ```
 
-## 发布到 PyPI（维护者）
-
-本仓库已包含 GitHub Actions 发布工作流：当你 push 一个 `v*` tag（例如 `v0.1.0`）时，会构建并通过 PyPI Trusted Publishing 发布（无需在 GitHub Secrets 中存 PyPI Token）。
-
-一次性准备：
-
-1) 在 PyPI 上创建项目 `rightcodes-tui-dashboard`
-2) 在该项目的 **Publishing / Trusted Publishers** 中添加本仓库（`okwinds/rightcodes-tui-dashboard`）
-
-发布命令示例：
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
 ## 相关文档
 
 - MVP 规格：`docs/specs/tui-dashboard-mvp.md`
