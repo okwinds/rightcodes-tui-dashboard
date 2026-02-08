@@ -33,6 +33,15 @@ from rightcodes_tui_dashboard.services.calculations import (
     normalize_subscriptions,
     summarize_quota,
 )
+from rightcodes_tui_dashboard.services.use_logs import (
+    extract_use_log_billing_rate,
+    extract_use_log_billing_source,
+    extract_use_log_channel,
+    extract_use_log_ip,
+    extract_use_log_tokens,
+    format_billing_rate,
+    format_billing_source,
+)
 
 
 @dataclass
@@ -49,6 +58,8 @@ class DashboardScreen(Screen):
         ("r", "refresh", "Refresh"),
         ("l", "logs", "Logs"),
         ("d", "doctor", "Doctor"),
+        ("n", "next_use_logs_page", "Next page"),
+        ("p", "prev_use_logs_page", "Prev page"),
         ("?", "help", "Help"),
     ]
 
@@ -83,6 +94,11 @@ class DashboardScreen(Screen):
         self._eta_remaining_tokens_est: float | None = None
         self._eta_mode: str | None = None
         self._degraded_reason: str | None = None
+
+        # 使用记录明细分页
+        self._use_logs_page: int = 1
+        self._use_logs_page_size: int = 20
+        self._use_logs_total: int | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -122,6 +138,29 @@ class DashboardScreen(Screen):
 
     def action_refresh(self) -> None:
         self._kick_refresh(force=True)
+
+    def action_next_use_logs_page(self) -> None:
+        max_page = self._get_use_logs_max_page()
+        if max_page is not None and self._use_logs_page >= max_page:
+            self._set_banner("使用记录明细：已是最后一页。", kind="info")
+            return
+        self._use_logs_page += 1
+        self._kick_refresh(force=True)
+
+    def action_prev_use_logs_page(self) -> None:
+        if self._use_logs_page <= 1:
+            self._set_banner("使用记录明细：已是第一页。", kind="info")
+            return
+        self._use_logs_page -= 1
+        self._kick_refresh(force=True)
+
+    def _get_use_logs_max_page(self) -> int | None:
+        if self._use_logs_total is None:
+            return None
+        if self._use_logs_page_size <= 0:
+            return None
+        total_pages = (int(self._use_logs_total) + int(self._use_logs_page_size) - 1) // int(self._use_logs_page_size)
+        return max(1, total_pages)
 
     def _tick(self) -> None:
         self._update_status()
@@ -210,7 +249,12 @@ class DashboardScreen(Screen):
             stats = client.stats_range(start_date=start_range, end_date=end_now)
             use_logs: dict[str, Any] = {}
             try:
-                use_logs = client.use_logs_list(page=1, page_size=20, start_date=start_range, end_date=end_now)
+                use_logs = client.use_logs_list(
+                    page=int(self._use_logs_page),
+                    page_size=int(self._use_logs_page_size),
+                    start_date=start_range,
+                    end_date=end_now,
+                )
             except ApiError:
                 # /use-log/list 属于“非关键”区块：接口变更时不应阻塞主面板刷新。
                 use_logs = {}
@@ -223,7 +267,9 @@ class DashboardScreen(Screen):
             }
 
     def _render_static_placeholders(self) -> None:
-        self.query_one("#quota_overview", Static).update(_quota_overview_line("— / —  ", None, width=10))
+        self.query_one("#quota_overview", Static).update(
+            Group(Text("余额：—", style="dim"), _quota_overview_line("— / —  ", None, width=10))
+        )
         self.query_one("#subscriptions", Static).update("套餐：—")
         self.query_one("#details_by_model", Static).update("详细统计数据：—")
         self.query_one("#use_logs", Static).update("使用记录明细：—")
@@ -272,7 +318,7 @@ class DashboardScreen(Screen):
         self._burn_cached = burn
         self._update_eta_targets(quota_remaining=quota.remaining_sum, burn=burn, now=now)
 
-        self._render_quota_overview(quota_label, quota_pct)
+        self._render_quota_overview(quota_label, quota_pct, balance=quota.remaining_sum)
 
         self.query_one("#burn_eta", Static).update(self._format_burn_eta_block(now))
 
@@ -329,12 +375,17 @@ class DashboardScreen(Screen):
 
         host.update(Columns(cards, equal=True, expand=True))
 
-    def _render_quota_overview(self, label: str, pct: float | None) -> None:
-        """渲染总览额度“单行三段”进度条：label + bar + %。"""
+    def _render_quota_overview(self, label: str, pct: float | None, *, balance: float | None) -> None:
+        """渲染总览额度（两行）：
+
+        - 第一行：余额（左对齐）
+        - 第二行：总消耗进度条（单行三段：label + bar + %）
+        """
 
         host = self.query_one("#quota_overview", Static)
         width = max(8, host.size.width - 2)  # 扣掉左右 padding（对齐套餐区域）
-        host.update(_quota_overview_line(f"{label}  ", pct, width=width))
+        balance_text = "余额：—" if balance is None else f"余额：{_fmt_money(balance)}"
+        host.update(Group(Text(balance_text, style="bold"), _quota_overview_line(f"{label}  ", pct, width=width)))
 
     def _render_details_by_model(self, data: dict[str, Any]) -> None:
         """渲染“详细统计数据”（按模型汇总表格，含合计行）。"""
@@ -383,10 +434,17 @@ class DashboardScreen(Screen):
         host.update(Group(Align.center(Text("详细统计数据", style="bold")), table))
 
     def _render_use_logs(self, data: dict[str, Any]) -> None:
-        """渲染“使用记录明细”（来自 /use-log/list；默认部分打码）。"""
+        """渲染“使用记录明细”（来自 /use-log/list；支持翻页）。"""
 
         host = self.query_one("#use_logs", Static)
         payload = data.get("use_logs") if isinstance(data.get("use_logs"), dict) else {}
+        if isinstance(payload.get("total"), int):
+            self._use_logs_total = int(payload["total"])
+        if isinstance(payload.get("page"), int):
+            self._use_logs_page = int(payload["page"])
+        if isinstance(payload.get("page_size"), int):
+            self._use_logs_page_size = int(payload["page_size"])
+
         items = extract_use_logs_items(payload)
 
         if not items:
@@ -416,31 +474,22 @@ class DashboardScreen(Screen):
             if not isinstance(item, dict):
                 continue
 
-            time_val = _first_str(item, ("time", "ts", "timestamp", "date", "created_at")) or "—"
+            time_val = _first_str(item, ("time", "ts", "timestamp", "date", "request_time", "created_at")) or "—"
             key_raw = _first_str(item, ("api_key_name", "key_name", "api_key", "key", "key_id")) or "—"
             model = _first_str(item, ("model", "model_name", "model_id")) or "—"
-            channel = _first_str(item, ("channel", "source", "provider", "app")) or "—"
+            channel = extract_use_log_channel(item) or "—"
 
-            tokens_val = _first_number(item, ("tokens", "total_tokens", "token_count", "usage_tokens"))
+            tokens_val = extract_use_log_tokens(item)
             tokens_text = "—" if tokens_val is None else f"{int(tokens_val):,}"
 
-            mult_val = _first_number(item, ("multiplier", "billing_multiplier", "rate_multiplier", "ratio"))
-            mult_text = "—" if mult_val is None else f"{float(mult_val):.2f}x"
+            rate_val = extract_use_log_billing_rate(item)
+            mult_text = format_billing_rate(rate_val)
 
-            bill_from = _first_str(
-                item,
-                (
-                    "billing_source",
-                    "deduct_source",
-                    "quota_source",
-                    "deduct_from",
-                    "balance_type",
-                    "note",
-                ),
-            ) or "—"
+            bill_from_raw = extract_use_log_billing_source(item)
+            bill_from = format_billing_source(bill_from_raw)
 
             cost_val = _first_number(item, ("cost", "total_cost", "amount", "charged", "fee"))
-            ip_raw = _first_str(item, ("ip", "client_ip", "ip_address")) or "—"
+            ip_raw = extract_use_log_ip(item) or "—"
 
             table.add_row(
                 time_val,
@@ -451,10 +500,16 @@ class DashboardScreen(Screen):
                 mult_text,
                 bill_from,
                 _fmt_cost_full_or_dash(cost_val),
-                _mask_ip(ip_raw),
+                ip_raw,
             )
 
-        host.update(Group(Align.center(Text("使用记录明细", style="bold")), table))
+        max_page = self._get_use_logs_max_page()
+        page_note = f"第 {self._use_logs_page} 页" if self._use_logs_page else "—"
+        if max_page is not None:
+            page_note = f"{page_note} / 共 {max_page} 页"
+        hint = Text(f"翻页：p 上一页 / n 下一页    {page_note}", style="dim")
+
+        host.update(Group(Align.center(Text("使用记录明细", style="bold")), table, Align.right(hint)))
 
     def _render_trend(self, data: dict[str, Any]) -> None:
         """渲染 tokens 趋势（sparkline）。"""
@@ -671,8 +726,9 @@ class LogsScreen(Screen):
         table.clear()
         for item in items:
             safe = redact_sensitive_fields(item)
-            time_val = _first_str(safe, ("time", "ts", "timestamp", "date", "created_at")) or "—"
-            tokens = _first_number_str(safe, ("tokens", "total_tokens", "token_count")) or "—"
+            time_val = _first_str(safe, ("time", "ts", "timestamp", "date", "request_time", "created_at")) or "—"
+            tokens_val = extract_use_log_tokens(safe)
+            tokens = "—" if tokens_val is None else f"{int(tokens_val):,}"
             cost = _first_number_str(safe, ("cost", "total_cost", "amount")) or "—"
 
             summary = safe.copy()
@@ -783,6 +839,7 @@ class HelpScreen(Screen):
                     "- r：刷新（退避期间不会强制请求）",
                     "- l：Logs 明细",
                     "- d：Doctor（仅 keys）",
+                    "- p / n：使用记录明细翻页（上一页/下一页）",
                     "- ?：帮助",
                     "",
                     "口径（MVP）：",
@@ -804,7 +861,7 @@ class RightCodesDashboardApp(App):
     CSS = """
     DashboardScreen { padding: 0; }
     #banner { height: 2; padding: 0 1; }
-    #quota_overview { height: 1; padding: 0 1; }
+    #quota_overview { height: 2; padding: 0 1; }
     #body_scroll { height: 1fr; padding: 0 1; }
     #trend_tokens { height: 3; }
     #status { height: 1; dock: bottom; }

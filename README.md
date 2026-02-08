@@ -8,7 +8,7 @@
 
 - 不使用 Playwright 自动化登录（只走内部 JSON 接口 + Bearer token）
 - 密码不落盘：仅交互式输入用于换取 token
-- token 优先写入系统 keyring；失败则兜底写入 `.local/token.json`（尽量 `0600`）
+- token 优先写入系统 keyring；失败则兜底写入“全局数据目录”的 `token.json`（尽量 `0600`；可用 `RIGHTCODES_DATA_DIR` 自定义目录）
 - 不输出/不提交任何敏感信息（token、密码、IP、真实明细数据等）
 
 ## 功能概览
@@ -113,8 +113,8 @@ rightcodes dashboard --help
 ## 安全与隐私
 
 - 账号密码：只用于登录换取 token；不会落盘。
-- token：优先存储到系统 keyring；否则写入 `.local/token.json`（尽量 `0600`）。
-- `.local/`：用于存放本地兜底 token 与 doctor 输出；**请勿提交到 Git**（本仓库默认已忽略）。
+- token：优先存储到系统 keyring；否则写入“全局数据目录”的 `token.json`（尽量 `0600`；可用 `RIGHTCODES_DATA_DIR` 自定义目录）。
+- 本项目会在本机保存 token/doctor 输出等文件；请勿提交到 Git（本仓库默认已忽略 `.local/`）。
 
 ## 开发（可选）
 

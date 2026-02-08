@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -32,3 +33,20 @@ def resolve_local_path(filename: str) -> Path:
     root = find_project_root()
     return root / ".local" / filename
 
+
+def resolve_app_data_path(filename: str) -> Path:
+    """解析应用全局数据目录下的文件路径（用于 pip 安装后跨目录可用）。
+
+    优先级：
+    1) 环境变量 `RIGHTCODES_DATA_DIR`（便于用户自定义/测试）
+    2) platformdirs 的 user_data_dir（macOS/Linux/Windows 各自遵循系统约定）
+    """
+
+    override = os.environ.get("RIGHTCODES_DATA_DIR")
+    if override and override.strip():
+        return Path(override.strip()).expanduser().resolve() / filename
+
+    from platformdirs import user_data_dir
+
+    base = Path(user_data_dir(appname="rightcodes", appauthor="rightcodes"))
+    return base / filename

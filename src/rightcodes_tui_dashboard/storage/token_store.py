@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from rightcodes_tui_dashboard.utils.paths import resolve_local_path
+from rightcodes_tui_dashboard.utils.paths import resolve_app_data_path, resolve_local_path
 
 
 @dataclass(frozen=True)
@@ -74,29 +74,34 @@ class LocalFileTokenStore(TokenStore):
     """本地文件 token 存储（兜底）。
 
     约束：
-    - 仅写入 `.local/token.json`
+    - 默认写入“全局应用数据目录”（跨目录可用）
+    - 兼容读取旧版 `.local/token.json`（若存在会自动迁移）
     - 文件权限尽量设置为 0600
     - 只保存 token 与写入时间
     """
 
     def __init__(self, base_dir: Path | None = None) -> None:
-        self._path = (base_dir / "token.json") if base_dir else resolve_local_path("token.json")
+        self._path = (base_dir / "token.json") if base_dir else resolve_app_data_path("token.json")
 
     def load_token(self) -> TokenRecord | None:
-        if not self._path.exists():
+        record = self._load_from_path(self._path)
+        if record is not None:
+            return record
+
+        legacy = _try_resolve_legacy_token_path()
+        if legacy is None or not legacy.exists():
             return None
+
+        legacy_record = self._load_from_path(legacy)
+        if legacy_record is None:
+            return None
+
+        # 迁移到全局目录（不删除旧文件；仅复制）
         try:
-            data = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-        if not isinstance(data, dict):
-            return None
-        token = data.get("token")
-        saved_at_raw = data.get("saved_at")
-        if not isinstance(token, str) or not token:
-            return None
-        saved_at = _safe_parse_dt(saved_at_raw) or dt.datetime.fromtimestamp(0)
-        return TokenRecord(token=token, saved_at=saved_at)
+            self.save_token(legacy_record.token)
+        except Exception:
+            pass
+        return legacy_record
 
     def save_token(self, token: str) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,6 +116,22 @@ class LocalFileTokenStore(TokenStore):
 
     def store_name(self) -> str:
         return "file"
+
+    def _load_from_path(self, path: Path) -> TokenRecord | None:
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        token = data.get("token")
+        saved_at_raw = data.get("saved_at")
+        if not isinstance(token, str) or not token:
+            return None
+        saved_at = _safe_parse_dt(saved_at_raw) or dt.datetime.fromtimestamp(0)
+        return TokenRecord(token=token, saved_at=saved_at)
 
 
 def _try_import_keyring():
@@ -134,4 +155,16 @@ def _safe_parse_dt(value) -> dt.datetime | None:
     try:
         return dt.datetime.fromisoformat(value.strip())
     except ValueError:
+        return None
+
+
+def _try_resolve_legacy_token_path() -> Path | None:
+    """兼容旧版：项目目录 `.local/token.json`。
+
+    - pip 安装后在任意目录运行时，无法定位项目根目录，这里必须容错。
+    """
+
+    try:
+        return resolve_local_path("token.json")
+    except Exception:
         return None

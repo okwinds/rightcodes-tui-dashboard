@@ -17,7 +17,8 @@ from rightcodes_tui_dashboard.storage.token_store import (
 )
 from rightcodes_tui_dashboard.ui.app import RightCodesDashboardApp
 from rightcodes_tui_dashboard.services.calculations import extract_use_logs_items
-from rightcodes_tui_dashboard.utils.paths import resolve_local_path
+from rightcodes_tui_dashboard.services.use_logs import extract_use_log_tokens
+from rightcodes_tui_dashboard.utils.paths import resolve_app_data_path
 
 
 DEFAULT_BASE_URL = "https://right.codes"
@@ -110,6 +111,9 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     store = _select_store("auto", disable_keyring=bool(args.no_keyring))
     token_record = store.load_token()
     token = token_record.token if token_record else None
+    token = _ensure_token_for_dashboard(base_url=base_url, store=store, token=token)
+    if not token:
+        return 1
 
     watch_seconds = _parse_duration_seconds(args.watch) if args.watch else 30
     if watch_seconds <= 0:
@@ -236,7 +240,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         )
 
     if not args.no_save:
-        out_path = Path(args.out) if args.out else resolve_local_path("rightcodes-doctor.json")
+        out_path = Path(args.out) if args.out else resolve_app_data_path("rightcodes-doctor.json")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"doctor 输出已写入：{out_path}")
@@ -244,6 +248,62 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print(json.dumps({"endpoints": summary["endpoints"]}, ensure_ascii=False, indent=2))
 
     return 0
+
+
+def _ensure_token_for_dashboard(*, base_url: str, store: TokenStore, token: str | None) -> str | None:
+    """确保 dashboard 启动时 token 可用。
+
+    目标：
+    - 全局只登录一次：跨目录可用（token store 负责持久化）
+    - token 过期时：不直接报错退出，先进入登录流程获取新 token
+    """
+
+    if token:
+        try:
+            with RightCodesApiClient(base_url=base_url, token=token) as client:
+                client.get_me()
+            return token
+        except AuthError:
+            token = None
+        except (RateLimitError, ApiError):
+            # 网络波动/429 不应阻塞 TUI 启动：先用现有 token 进入界面，后续刷新再处理。
+            return token
+
+    # token 缺失或失效：交互式重新登录
+    print("未登录或 token 已失效，正在进入登录流程（仅本地保存 token，密码不落盘）。")
+
+    username = input("Username: ").strip()
+    password = getpass.getpass("Password: ")
+
+    try:
+        with RightCodesApiClient(base_url=base_url, token=None) as client:
+            new_token = client.login(username=username, password=password)
+    except AuthError as e:
+        print(f"认证失败：{e}. 请检查账号/密码。")
+        return None
+    except RateLimitError as e:
+        retry_at = e.next_retry_at.isoformat(sep=" ", timespec="seconds") if e.next_retry_at else "unknown"
+        print(f"触发限流（429），请稍后重试。Next retry: {retry_at}")
+        return None
+    except ApiError as e:
+        print(f"登录失败：{e}")
+        return None
+
+    try:
+        store.save_token(new_token)
+        store_name = store.store_name()
+    except Exception as e:
+        if isinstance(store, KeyringTokenStore):
+            file_store = LocalFileTokenStore()
+            file_store.save_token(new_token)
+            store_name = file_store.store_name()
+            print(f"keyring 不可用（{e.__class__.__name__}），已降级保存到本地文件（{store_name}）。")
+        else:
+            print(f"保存 token 失败：{e.__class__.__name__}")
+            return None
+
+    print(f"已登录并保存 token（{store_name}）。")
+    return new_token
 
 
 def _print_logs_table(items: list[dict[str, Any]]) -> None:
@@ -259,8 +319,9 @@ def _print_logs_table(items: list[dict[str, Any]]) -> None:
     table.add_column("summary")
 
     for item in items:
-        time_val = _first_str(item, ("time", "ts", "timestamp", "date", "created_at")) or "—"
-        tokens = _first_number_str(item, ("tokens", "total_tokens", "token_count")) or "—"
+        time_val = _first_str(item, ("time", "ts", "timestamp", "date", "request_time", "created_at")) or "—"
+        tokens_val = extract_use_log_tokens(item)
+        tokens = "—" if tokens_val is None else f"{int(tokens_val):,}"
         cost = _first_number_str(item, ("cost", "total_cost", "amount")) or "—"
         summary = item.copy()
         for k in (
