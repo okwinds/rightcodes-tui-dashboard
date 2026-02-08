@@ -623,21 +623,20 @@ class DashboardScreen(Screen):
         header = Table.grid(expand=True)
         header.add_column(justify="left")
         header.add_column(justify="right")
+        right_block = Text()
+        right_block.append("github: okwinds/rightcodes-tui-dashboard", style="dim")
+        right_block.append("\n")
+        right_block.append("right.codes 邀请码：4d98a8ea  加返5%", style="dim")
         header.add_row(
             Text(f"Burn: {tph}   成本速率: {cph}"),
-            Text("github: okwinds/rightcodes-tui-dashboard", style="dim"),
+            Align.right(right_block),
         )
 
         body_lines = [
             f"ETA: {eta}  (倒计时 {countdown})",
             f"≈ 剩余 Token（按近窗口均价估算）: {remaining_tokens_est}",
-            "right.codes 邀请码：4d98a8ea  加返5%",
         ]
         body = Text("\n".join(body_lines))
-        last = body_lines[-1]
-        start = body.plain.rfind(last)
-        if start >= 0:
-            body.stylize("dim", start, start + len(last))
         return Group(header, body)
 
     def _update_burn_eta_live(self) -> None:
