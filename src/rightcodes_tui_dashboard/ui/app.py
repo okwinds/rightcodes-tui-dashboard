@@ -43,6 +43,7 @@ from rightcodes_tui_dashboard.services.use_logs import (
     format_billing_rate,
     format_billing_source,
 )
+from rightcodes_tui_dashboard.services.update_check import fetch_pypi_latest_version, is_newer_version
 from rightcodes_tui_dashboard import __version__
 
 
@@ -102,6 +103,12 @@ class DashboardScreen(Screen):
         self._use_logs_page_size: int = 20
         self._use_logs_total: int | None = None
 
+        # 版本更新提示（非搅扰式：只在右上角显示一个小标记）
+        self._update_available: bool = False
+        self._last_quota_label: str | None = None
+        self._last_quota_pct: float | None = None
+        self._last_balance: float | None = None
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Vertical():
@@ -119,10 +126,32 @@ class DashboardScreen(Screen):
         self.set_focus(self.query_one("#body_scroll", VerticalScroll))
 
         self._render_static_placeholders()
+        asyncio.create_task(self._check_update_available())
         self._kick_refresh(force=True)
 
         if self._watch_seconds:
             self.set_interval(1.0, self._tick)
+
+    async def _check_update_available(self) -> None:
+        """后台检查是否有新版本（失败即忽略，不影响主功能）。"""
+
+        try:
+            latest = await asyncio.to_thread(fetch_pypi_latest_version, package="rightcodes-tui-dashboard")
+        except Exception:
+            return
+        if not latest:
+            return
+        if not is_newer_version(latest=latest, current=__version__):
+            return
+
+        self._update_available = True
+
+        # 非搅扰式刷新：只重绘顶部总览（不触发网络请求、不弹 banner）。
+        if self.is_mounted:
+            if self._last_quota_label is not None:
+                self._render_quota_overview(self._last_quota_label, self._last_quota_pct, balance=self._last_balance)
+            else:
+                self._render_static_placeholders()
 
     def action_quit(self) -> None:
         self.app.exit()
@@ -286,7 +315,7 @@ class DashboardScreen(Screen):
         header = Table.grid(expand=True)
         header.add_column(justify="left")
         header.add_column(justify="right")
-        header.add_row(Text("余额：—", style="dim"), Text(f"ver: {__version__}", style="dim"))
+        header.add_row(Text("余额：—", style="dim"), self._version_label())
         self.query_one("#quota_overview", Static).update(
             Group(header, _quota_overview_line("套餐：— / —  ", None, width=10))
         )
@@ -340,6 +369,9 @@ class DashboardScreen(Screen):
 
         me_payload = data.get("me") if isinstance(data.get("me"), dict) else {}
         balance = extract_me_balance(me_payload)
+        self._last_quota_label = quota_label
+        self._last_quota_pct = quota_pct
+        self._last_balance = balance
         self._render_quota_overview(quota_label, quota_pct, balance=balance)
 
         self.query_one("#burn_eta", Static).update(self._format_burn_eta_block(now))
@@ -409,9 +441,20 @@ class DashboardScreen(Screen):
         header = Table.grid(expand=True)
         header.add_column(justify="left")
         header.add_column(justify="right")
-        header.add_row(Text(balance_text, style="bold"), Text(f"ver: {__version__}", style="dim"))
+        header.add_row(Text(balance_text, style="bold"), self._version_label())
 
         host.update(Group(header, _quota_overview_line(f"套餐：{label}  ", pct, width=width)))
+
+    def _version_label(self) -> Text:
+        """渲染右上角版本号（非搅扰式：仅小标记提示有新版本）。"""
+
+        if self._update_available:
+            t = Text()
+            # 用简单符号作为“有更新”标记（比 emoji 更稳；且不占太多宽度）。
+            t.append("↑ ", style="yellow bold")
+            t.append(f"ver: {__version__}", style="dim")
+            return t
+        return Text(f"ver: {__version__}", style="dim")
 
     def _render_details_by_model(self, data: dict[str, Any]) -> None:
         """渲染“详细统计数据”（按模型汇总表格，含合计行）。"""
@@ -894,6 +937,8 @@ class HelpScreen(Screen):
                     "- d：Doctor（仅 keys）",
                     "- p / n：使用记录明细翻页（上一页/下一页）",
                     "- ?：帮助",
+                    "",
+                    "提示：右上角 `ver:` 前出现 `↑` 表示检测到新版本（非搅扰式提示）。",
                     "",
                     "口径（MVP）：",
                     "- 套餐时间字段：优先将 `created_at/obtained_at` 作为“获得时间”；将 `expired_at` 作为“到期时间”（仅展示，不用于过滤）",
