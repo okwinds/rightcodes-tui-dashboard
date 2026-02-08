@@ -620,17 +620,25 @@ class DashboardScreen(Screen):
         countdown = self._format_eta_countdown(now)
         remaining_tokens_est = "—" if self._eta_remaining_tokens_est is None else f"{self._eta_remaining_tokens_est:,.0f}"
 
-        lines = [
-            f"Burn: {tph}   成本速率: {cph}",
+        header = Table.grid(expand=True)
+        header.add_column(justify="left")
+        header.add_column(justify="right")
+        header.add_row(
+            Text(f"Burn: {tph}   成本速率: {cph}"),
+            Text("github: okwinds/rightcodes-tui-dashboard", style="dim"),
+        )
+
+        body_lines = [
             f"ETA: {eta}  (倒计时 {countdown})",
             f"≈ 剩余 Token（按近窗口均价估算）: {remaining_tokens_est}",
-            "github: okwinds/rightcodes-tui-dashboard",
+            "right.codes 邀请码：4d98a8ea  加返5%",
         ]
-        t = Text()
-        t.append("\n".join(lines[:-1]))
-        t.append("\n")
-        t.append(lines[-1], style="dim")
-        return t
+        body = Text("\n".join(body_lines))
+        last = body_lines[-1]
+        start = body.plain.rfind(last)
+        if start >= 0:
+            body.stylize("dim", start, start + len(last))
+        return Group(header, body)
 
     def _update_burn_eta_live(self) -> None:
         """每秒更新倒计时（不触发任何网络请求）。"""
