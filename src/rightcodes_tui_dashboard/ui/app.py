@@ -287,7 +287,9 @@ class DashboardScreen(Screen):
         header.add_column(justify="left")
         header.add_column(justify="right")
         header.add_row(Text("余额：—", style="dim"), Text(f"ver: {__version__}", style="dim"))
-        self.query_one("#quota_overview", Static).update(Group(header, _quota_overview_line("— / —  ", None, width=10)))
+        self.query_one("#quota_overview", Static).update(
+            Group(header, _quota_overview_line("套餐：— / —  ", None, width=10))
+        )
         self.query_one("#subscriptions", Static).update("套餐：—")
         self.query_one("#details_by_model", Static).update("详细统计数据：—")
         self.query_one("#use_logs", Static).update("使用记录明细：—")
@@ -409,7 +411,7 @@ class DashboardScreen(Screen):
         header.add_column(justify="right")
         header.add_row(Text(balance_text, style="bold"), Text(f"ver: {__version__}", style="dim"))
 
-        host.update(Group(header, _quota_overview_line(f"{label}  ", pct, width=width)))
+        host.update(Group(header, _quota_overview_line(f"套餐：{label}  ", pct, width=width)))
 
     def _render_details_by_model(self, data: dict[str, Any]) -> None:
         """渲染“详细统计数据”（按模型汇总表格，含合计行）。"""
