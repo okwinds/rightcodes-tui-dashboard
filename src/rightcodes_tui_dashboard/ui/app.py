@@ -482,7 +482,7 @@ class DashboardScreen(Screen):
             show_edge=True,
             pad_edge=True,
             expand=True,
-            padding=(0, 1),
+            padding=(0, 0),
             show_lines=False,
             header_style="bold",
         )
@@ -1037,9 +1037,14 @@ def _mask_key(value: str) -> str:
         return "—"
     if raw == "***REDACTED***":
         return raw
-    if len(raw) <= 6:
-        return raw[0] + "…" if len(raw) > 1 else "…"
-    return f"{raw[:2]}…{raw[-4:]}"
+    n = len(raw)
+    if n <= 4:
+        return raw[0] + "…" if n > 1 else "…"
+    if n <= 8:
+        return f"{raw[:2]}…{raw[-2:]}"
+    if n <= 12:
+        return f"{raw[:3]}…{raw[-3:]}"
+    return f"{raw[:4]}…{raw[-4:]}"
 
 
 def _mask_ip(value: str) -> str:

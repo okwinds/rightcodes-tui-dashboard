@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rightcodes-tui-dashboard"
-version = "0.1.10"
+version = "0.1.11"
 description = "Right.codes CLI + TUI dashboard (personal usage stats) without Playwright."
 readme = "README.md"
 requires-python = ">=3.9"
