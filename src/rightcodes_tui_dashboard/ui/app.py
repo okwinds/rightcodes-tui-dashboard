@@ -491,8 +491,8 @@ class DashboardScreen(Screen):
         table.add_column("模型", no_wrap=True)
         table.add_column("渠道", no_wrap=True)
         table.add_column("Tokens", justify="right", no_wrap=True)
-        table.add_column("计费倍率", justify="right", no_wrap=True)
-        table.add_column("扣费来源", no_wrap=True)
+        table.add_column("倍率", justify="right", no_wrap=True)
+        table.add_column("资费", no_wrap=True)
         table.add_column("费用", justify="right", no_wrap=True)
         table.add_column("IP", no_wrap=True)
 
