@@ -271,6 +271,27 @@
 
 - Outcome: 文档契约与现状一致；新增/更新内容不包含敏感信息，且对 `pip install` 使用方式有明确说明。
 
+### Fix: 切换主题后出现“残影/半透明线”
+
+- When: `2026-02-08`
+- Who: `agent`
+- Context: 用户在 Dashboard 中多次切换 theme/dark mode 后，发现总进度条下方与套餐卡片边界处出现“残影/半透明线”。
+
+#### Action
+
+- Files touched:
+  - `src/rightcodes_tui_dashboard/ui/app.py`
+  - `tests/test_ui_theme_toggle_artifact_guard.py`
+  - `docs/specs/2026-02-08-fix-theme-toggle-ghosting.md`
+  - `docs/task-summaries/2026-02-08-fix-theme-toggle-ghosting.md`
+  - `docs/INDEX.md`
+- Commands run:
+  - `python3 -m pytest`
+
+#### Result
+
+- Outcome: 为关键 Static 区块设置显式背景色，重绘时清屏；新增回归护栏测试，避免后续回归。
+
 - When: `2026-02-07 20:29`
 - Who: `agent`
 - Context: 订阅字段语义调整（expired_at 实为获得时间 obtained_at），并需要按 reset_today 隐含规则展示“有效额度口径”；同时修复旧单测仍按“到期过滤”断言导致的失败。

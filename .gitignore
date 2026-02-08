@@ -20,4 +20,4 @@
 *.egg-info/
 
 # Local screenshots (may contain personal data; keep local)
-/截图.png
+/*.png

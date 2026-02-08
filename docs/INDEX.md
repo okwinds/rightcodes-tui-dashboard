@@ -18,6 +18,7 @@
 
 - 主规格（当前实现 v0.1.x）：`docs/specs/tui-dashboard-mvp.md`
 - 修复记录：`docs/specs/2026-02-07-fix-textual-render-name-collision.md`
+- 修复记录：`docs/specs/2026-02-08-fix-theme-toggle-ghosting.md`
 - `.gitignore` 规则规格：`docs/specs/2026-02-08-add-gitignore.md`
 
 ---
@@ -38,4 +39,4 @@
 - `.gitignore`（忽略规则）：`docs/task-summaries/2026-02-08-add-gitignore.md`
 - Dashboard UI 收敛 + 使用记录明细：`docs/task-summaries/2026-02-08-dashboard-ui-polish-and-use-logs.md`
 - 文档体系刷新：`docs/task-summaries/2026-02-08-docs-refresh.md`
-
+- 修复主题切换残影：`docs/task-summaries/2026-02-08-fix-theme-toggle-ghosting.md`

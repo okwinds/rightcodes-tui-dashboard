@@ -912,12 +912,21 @@ class RightCodesDashboardApp(App):
     """Textual App 包装。"""
 
     CSS = """
-    DashboardScreen { padding: 0; }
-    #banner { height: 2; padding: 0 1; }
-    #quota_overview { height: 2; padding: 0 1; }
-    #body_scroll { height: 1fr; padding: 0 1; }
-    #trend_tokens { height: 3; }
-    #status { height: 1; dock: bottom; }
+    /* 
+    说明：
+    - theme/dark mode 切换时，若某些区域没有显式背景色，可能出现“上一帧残影”。
+      这里为关键容器与 Static 区块设置背景色，确保每次重绘会把整块区域清干净。
+    */
+    DashboardScreen { padding: 0; background: $background; }
+    #banner { height: 2; padding: 0 1; background: $background; }
+    #quota_overview { height: 2; padding: 0 1; background: $background; }
+    #body_scroll { height: 1fr; padding: 0 1; background: $background; }
+    #subscriptions { background: $background; }
+    #details_by_model { background: $background; }
+    #use_logs { background: $background; }
+    #trend_tokens { height: 3; background: $background; }
+    #burn_eta { background: $background; }
+    #status { height: 1; dock: bottom; background: $background; }
     """
 
     def __init__(
