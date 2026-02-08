@@ -9,7 +9,7 @@
 - 不使用 Playwright 自动化登录（只走内部 JSON 接口 + Bearer token）
 - 密码不落盘：仅交互式输入用于换取 token
 - token 优先写入系统 keyring；失败则兜底写入“全局数据目录”的 `token.json`（尽量 `0600`；可用 `RIGHTCODES_DATA_DIR` 自定义目录）
-- 不输出/不提交任何敏感信息（token、密码、IP、真实明细数据等）
+- 不提交任何敏感信息（token、密码、cookie、真实明细数据等）；CLI 默认脱敏输出，TUI“使用记录明细”会显示完整 IP（个人工具场景）
 
 ## 功能概览
 
@@ -20,11 +20,12 @@
 
 ## 安装
 
-### 方式 A：从 PyPI 安装（推荐）
-
-（当你已经发布到 PyPI 后）
+### 方式 A：pip 安装（推荐）
 
 ```bash
+pip install rightcodes-tui-dashboard
+
+# 升级（可选）
 pip install -U rightcodes-tui-dashboard
 
 # 或（等价）
@@ -33,7 +34,7 @@ python3 -m pip install -U rightcodes-tui-dashboard
 
 ### 方式 B：从 GitHub 安装（无需手动下载源码）
 
-发布到 GitHub 后可以直接：
+也可以直接：
 
 ```bash
 python3 -m pip install -U "rightcodes-tui-dashboard @ git+https://github.com/okwinds/rightcodes-tui-dashboard.git"
