@@ -486,9 +486,11 @@ class DashboardScreen(Screen):
             show_lines=False,
             header_style="bold",
         )
-        table.add_column("时间", no_wrap=True)
-        table.add_column("密钥", no_wrap=True)
-        table.add_column("模型", no_wrap=True)
+        # “时间”列的内容通常近似等宽（例如 YYYY-MM-DD HH:MM:SS），但在 expand 模式下
+        # 可能被分配到额外的宽度，造成右侧留白浪费；这里固定宽度，把空间让给“密钥/模型”列。
+        table.add_column("时间", no_wrap=True, width=19, max_width=19)
+        table.add_column("密钥", no_wrap=True, ratio=2)
+        table.add_column("模型", no_wrap=True, ratio=2)
         table.add_column("渠道", no_wrap=True)
         table.add_column("Tokens", justify="right", no_wrap=True)
         table.add_column("倍率", justify="right", no_wrap=True)
@@ -500,7 +502,8 @@ class DashboardScreen(Screen):
             if not isinstance(item, dict):
                 continue
 
-            time_val = _first_str(item, ("time", "ts", "timestamp", "date", "request_time", "created_at")) or "—"
+            time_raw = _first_str(item, ("time", "ts", "timestamp", "date", "request_time", "created_at")) or "—"
+            time_val = _fmt_use_log_time(time_raw)
             key_raw = _first_str(item, ("api_key_name", "key_name", "api_key", "key", "key_id")) or "—"
             model = _first_str(item, ("model", "model_name", "model_id")) or "—"
             channel = extract_use_log_channel(item) or "—"
@@ -1064,6 +1067,36 @@ def _mask_ip(value: str) -> str:
     if len(raw) <= 4:
         return "***"
     return f"{raw[:2]}…{raw[-2:]}"
+
+
+def _fmt_use_log_time(value: str) -> str:
+    """格式化 use-log 明细里的时间列（稳定宽度，减少无意义留白）。
+
+    目标：
+    - 同一列宽度尽量稳定（避免表格抖动）
+    - 不折行（no_wrap），保持年份信息（YYYY）
+
+    Args:
+        value: 原始时间字符串（可能是 ISO-like）。
+
+    Returns:
+        紧凑时间字符串；无法解析则返回原字符串（或 `—`）。
+    """
+
+    raw = (value or "").strip()
+    if raw in ("", "—"):
+        return "—"
+
+    text = raw.replace("T", " ")
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        parsed = dt.datetime.fromisoformat(text)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone().replace(tzinfo=None)
+        return parsed.strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return raw
 
 
 def _fmt_time(value: dt.datetime | None, raw: str | None) -> str:
