@@ -30,12 +30,7 @@ def test_burn_eta_block_contains_github_and_invite_code() -> None:
     console.print(renderable)
     text = console.export_text()
 
-    first_line = next((line for line in text.splitlines() if "成本速率" in line), "")
-    assert "github: okwinds/rightcodes-tui-dashboard" in first_line
-    assert "Burn:" in first_line
-
-    assert "right.codes 邀请码：4d98a8ea  加返5%" in text
-    # 邀请码应跟随在 github 行下方（同一个右侧块）
-    idx_github = text.find("github: okwinds/rightcodes-tui-dashboard")
-    idx_invite = text.find("right.codes 邀请码：4d98a8ea  加返5%")
-    assert 0 <= idx_github < idx_invite
+    lines = [line for line in text.splitlines() if line.strip()]
+    assert any("Burn:" in line and "成本速率" in line and "github: okwinds/rightcodes-tui-dashboard" in line for line in lines)
+    assert any("ETA:" in line and "right.codes 邀请码：4d98a8ea  加返5%" in line for line in lines)
+    assert any("≈ 剩余 Token（按近窗口均价估算）" in line for line in lines)

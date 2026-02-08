@@ -620,24 +620,26 @@ class DashboardScreen(Screen):
         countdown = self._format_eta_countdown(now)
         remaining_tokens_est = "—" if self._eta_remaining_tokens_est is None else f"{self._eta_remaining_tokens_est:,.0f}"
 
-        header = Table.grid(expand=True)
-        header.add_column(justify="left")
-        header.add_column(justify="right")
-        right_block = Text()
-        right_block.append("github: okwinds/rightcodes-tui-dashboard", style="dim")
-        right_block.append("\n")
-        right_block.append("right.codes 邀请码：4d98a8ea  加返5%", style="dim")
-        header.add_row(
-            Text(f"Burn: {tph}   成本速率: {cph}"),
-            Align.right(right_block),
-        )
+        # 说明：
+        # - 左侧三行（Burn / ETA / 估算剩余 tokens）
+        # - 右侧两行（github / 邀请码），需与左侧“逐行对齐”且不出现空行
+        grid = Table.grid(expand=True)
+        grid.add_column(justify="left")
+        grid.add_column(justify="right", no_wrap=True)
 
-        body_lines = [
-            f"ETA: {eta}  (倒计时 {countdown})",
-            f"≈ 剩余 Token（按近窗口均价估算）: {remaining_tokens_est}",
-        ]
-        body = Text("\n".join(body_lines))
-        return Group(header, body)
+        grid.add_row(
+            Text(f"Burn: {tph}   成本速率: {cph}"),
+            Text("github: okwinds/rightcodes-tui-dashboard", style="dim"),
+        )
+        grid.add_row(
+            Text(f"ETA: {eta}  (倒计时 {countdown})"),
+            Text("right.codes 邀请码：4d98a8ea  加返5%", style="dim"),
+        )
+        grid.add_row(
+            Text(f"≈ 剩余 Token（按近窗口均价估算）: {remaining_tokens_est}"),
+            Text(""),
+        )
+        return grid
 
     def _update_burn_eta_live(self) -> None:
         """每秒更新倒计时（不触发任何网络请求）。"""
