@@ -482,15 +482,17 @@ class DashboardScreen(Screen):
             show_edge=True,
             pad_edge=True,
             expand=True,
-            padding=(0, 0),
+            # 右侧留出“1 个汉字”左右的安全边距（≈2 空格），避免文本贴边导致可读性差；
+            # 左侧不加 padding，把空间更多让给“密钥/模型”列。
+            padding=(0, 2, 0, 0),
             show_lines=False,
             header_style="bold",
         )
         # “时间”列的内容通常近似等宽（例如 YYYY-MM-DD HH:MM:SS），但在 expand 模式下
         # 可能被分配到额外的宽度，造成右侧留白浪费；这里固定宽度，把空间让给“密钥/模型”列。
         table.add_column("时间", no_wrap=True, width=19, max_width=19)
-        table.add_column("密钥", no_wrap=True, ratio=2)
-        table.add_column("模型", no_wrap=True, ratio=2)
+        table.add_column("密钥", no_wrap=True, ratio=3)
+        table.add_column("模型", no_wrap=True, ratio=3)
         table.add_column("渠道", no_wrap=True)
         table.add_column("Tokens", justify="right", no_wrap=True)
         table.add_column("倍率", justify="right", no_wrap=True)
@@ -1043,11 +1045,13 @@ def _mask_key(value: str) -> str:
     n = len(raw)
     if n <= 4:
         return raw[0] + "…" if n > 1 else "…"
-    if n <= 8:
+    if n == 5:
         return f"{raw[:2]}…{raw[-2:]}"
+    if n <= 8:
+        return f"{raw[:3]}…{raw[-2:]}"
     if n <= 12:
-        return f"{raw[:3]}…{raw[-3:]}"
-    return f"{raw[:4]}…{raw[-4:]}"
+        return f"{raw[:4]}…{raw[-3:]}"
+    return f"{raw[:5]}…{raw[-4:]}"
 
 
 def _mask_ip(value: str) -> str:
