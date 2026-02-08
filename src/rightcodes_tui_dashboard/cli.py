@@ -155,9 +155,15 @@ def cmd_logs(args: argparse.Namespace) -> int:
         print("未登录：请先执行 `rightcodes login`。")
         return 1
 
-    range_seconds = _parse_duration_seconds(args.range) if args.range else 24 * 3600
     now = dt.datetime.now()
-    start = (now - dt.timedelta(seconds=range_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
+    range_text = (args.range or "").strip()
+    if range_text.lower() in ("today", "td", "今日"):
+        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        range_seconds = _parse_duration_seconds(range_text) if range_text else 24 * 3600
+        start_dt = now - dt.timedelta(seconds=range_seconds)
+
+    start = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
     end = now.strftime("%Y-%m-%dT%H:%M:%S")
 
     try:
