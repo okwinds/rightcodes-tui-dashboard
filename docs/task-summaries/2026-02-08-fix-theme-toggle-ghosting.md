@@ -45,8 +45,10 @@
 
 - `src/rightcodes_tui_dashboard/ui/app.py`
   - `RightCodesDashboardApp.CSS`：为 `#banner/#quota_overview/#body_scroll/#subscriptions/#details_by_model/#use_logs/#burn_eta/#status` 等设置背景色。
+  - 主题变更：覆写 `_watch_theme`，在 theme 切换后额外触发一次全局 `refresh(repaint=True, layout=True)`，并刷新当前 screen。
 - `tests/test_ui_theme_toggle_artifact_guard.py`
   - 新增离线回归护栏：断言 CSS 包含关键区域背景配置。
+  - 新增护栏：断言 App 覆写 `_watch_theme`（避免后续误删导致残影回归）。
 
 ---
 
@@ -65,4 +67,3 @@
 ## 6) Known Issues / Follow-ups
 
 - 若未来引入更多 Rich renderable 区块（尤其是固定高度的 `Static`），建议同样显式设置背景色，避免类似残影问题。
-

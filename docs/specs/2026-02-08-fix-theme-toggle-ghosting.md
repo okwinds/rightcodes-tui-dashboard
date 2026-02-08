@@ -23,12 +23,14 @@
 
 - 部分 `Static` 区块使用 Rich renderables（`Panel/Table/Columns`）渲染内容，这些 renderables 在某些情况下 **不会覆盖其所属区域的每一个 cell**（例如区域内的空白部分没有显式背景色）。
 - 当 theme/dark mode 切换触发重绘时，若该区域未设置明确 `background`，终端可能保留上一帧字符，表现为“残影/半透明”。
+- 即使设置了 `background`，在少数终端/渲染组合下，主题切换触发的 CSS 刷新也可能不足以保证“整屏完全重绘”，仍有机会出现局部残留。
 
 ---
 
 ## Fix
 
 - 在 `RightCodesDashboardApp.CSS` 中，为关键容器与 Static 区块显式设置 `background: $background`，确保每次重绘会先用背景色清空区域，再绘制新内容。
+- 在 `RightCodesDashboardApp` 中覆写 `_watch_theme`：主题变更后额外触发一次全局 `refresh(repaint=True, layout=True)`（并刷新当前 screen），进一步降低偶发残影概率。
 - 新增最轻量的离线回归护栏测试：断言 CSS 中包含关键区块的 background 配置，避免后续回归。
 
 ---
@@ -59,4 +61,3 @@
 ## Rollback
 
 - 回滚 `RightCodesDashboardApp.CSS` 的背景色设置与对应测试即可恢复原行为（但可能重新出现残影问题）。
-

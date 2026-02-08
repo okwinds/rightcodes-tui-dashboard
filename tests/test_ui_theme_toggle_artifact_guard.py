@@ -27,3 +27,12 @@ def test_app_css_sets_background_for_static_sections() -> None:
         assert selector in css
     assert "background: $background" in css
 
+
+def test_app_forces_repaint_on_theme_change() -> None:
+    """回归护栏：主题切换时要强制 repaint，避免偶发残影。"""
+
+    from textual.app import App
+
+    from rightcodes_tui_dashboard.ui.app import RightCodesDashboardApp
+
+    assert RightCodesDashboardApp._watch_theme is not App._watch_theme

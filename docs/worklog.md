@@ -488,3 +488,26 @@
   - 新增 `.gitignore`：忽略 `.DS_Store`、`.local/`、`.pytest_cache/`、`*.egg-info/`。
   - 记录了对应 spec 与任务总结，并更新 `DOCS_INDEX.md`。
   - 离线回归通过（exit code 0）。
+
+### Fix: 主题切换后偶发“残影/半透明线”仍存在，强制 repaint
+
+- When: `2026-02-08 19:30`
+- Who: `agent`
+- Context: 用户反馈在反复切换主题后，“总进度条下方/套餐卡片上边框附近”的半透明残影仍偶发。此前仅通过 CSS 显式 background 清屏，但在少数终端/渲染组合下仍可能未触发整屏完整重绘。
+
+#### Action
+
+- Files touched:
+  - `rightcodes-tui-dashboard/src/rightcodes_tui_dashboard/ui/app.py`
+  - `rightcodes-tui-dashboard/tests/test_ui_theme_toggle_artifact_guard.py`
+  - `rightcodes-tui-dashboard/docs/specs/2026-02-08-fix-theme-toggle-ghosting.md`
+  - `rightcodes-tui-dashboard/docs/task-summaries/2026-02-08-fix-theme-toggle-ghosting.md`
+- Commands run:
+  - `python3 -m pytest -q`
+
+#### Result
+
+- Outcome:
+  - 在 `RightCodesDashboardApp` 覆写 `_watch_theme`：主题变更后额外触发一次 `refresh(repaint=True, layout=True)`（并刷新 screen），降低偶发残影概率。
+  - 新增离线护栏测试：确保 `_watch_theme` 覆写存在，避免后续回归。
+  - 离线回归通过（exit code 0）。

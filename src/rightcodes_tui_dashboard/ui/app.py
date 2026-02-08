@@ -994,6 +994,22 @@ class RightCodesDashboardApp(App):
         self._rate_window_seconds = rate_window_seconds
         self._granularity = granularity
 
+    def _watch_theme(self, theme_name: str) -> None:
+        """主题切换时强制 repaint，避免少数终端出现“上一帧残影”。
+
+        背景：
+        - Textual 在主题切换时会刷新 CSS，但部分终端/组合场景下仍可能出现局部区域未被完整覆盖，
+          造成“半透明线/残影”。
+        - 这里在主题变更后额外触发一次全局 repaint + layout refresh，确保整屏被重新绘制。
+        """
+
+        super()._watch_theme(theme_name)
+
+        # 使用 call_next 避免与 refresh_css 同步竞争；让 repaint 发生在下一轮事件循环。
+        self.call_next(self.refresh, repaint=True, layout=True)
+        if self.screen is not None:
+            self.call_next(self.screen.refresh, repaint=True, layout=True)
+
     def on_mount(self) -> None:
         self.push_screen(
             DashboardScreen(
