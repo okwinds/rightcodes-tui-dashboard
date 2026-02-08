@@ -291,6 +291,37 @@ def extract_stats_totals(payload: dict[str, Any]) -> StatsTotals:
     return StatsTotals(tokens=tokens, cost=cost, requests=requests)
 
 
+def extract_me_balance(payload: dict[str, Any]) -> float | None:
+    """从 /auth/me 响应中提取账户余额（多字段变体兼容）。
+
+    说明：
+    - 网页通常展示“余额”作为单独字段，不等价于 subscriptions 的剩余额度汇总。
+    - 该字段用于 UI 顶部“余额”展示；若解析失败返回 None（上层降级展示）。
+
+    Args:
+        payload: /auth/me 响应 JSON object。
+
+    Returns:
+        余额数值（float）；缺失或无法解析返回 None。
+    """
+
+    for k in ("balance", "wallet_balance", "wallet", "credit_balance", "remaining_balance"):
+        raw = payload.get(k)
+        if raw is None:
+            continue
+        if isinstance(raw, bool):
+            continue
+        if isinstance(raw, (int, float)):
+            return float(raw)
+        if isinstance(raw, str) and raw.strip():
+            text = raw.strip().replace("$", "").replace(",", "")
+            try:
+                return float(text)
+            except ValueError:
+                continue
+    return None
+
+
 def extract_model_usage_rows(payload: dict[str, Any]) -> list[ModelUsageRow]:
     """从 /use-log/stats/advanced 响应中提取按模型聚合的使用数据。
 

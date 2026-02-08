@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from rightcodes_tui_dashboard import __version__
 from rightcodes_tui_dashboard.cli import (
     cmd_dashboard,
     cmd_doctor,
@@ -19,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     """
 
     parser = argparse.ArgumentParser(prog="rightcodes")
+    parser.add_argument("--version", action="version", version=f"rightcodes {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_login = sub.add_parser("login", help="交互式登录并保存 token")
@@ -91,16 +93,24 @@ def main(argv: list[str] | None = None) -> int:
 
     args = build_parser().parse_args(argv)
 
-    if args.command == "login":
-        return cmd_login(args)
-    if args.command == "dashboard":
-        return cmd_dashboard(args)
-    if args.command == "logs":
-        return cmd_logs(args)
-    if args.command == "doctor":
-        return cmd_doctor(args)
+    try:
+        if args.command == "login":
+            return cmd_login(args)
+        if args.command == "dashboard":
+            return cmd_dashboard(args)
+        if args.command == "logs":
+            return cmd_logs(args)
+        if args.command == "doctor":
+            return cmd_doctor(args)
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        return 130
+    except Exception as e:
+        print(f"Unexpected error: {e.__class__.__name__}")
+        return 1
 
-    raise AssertionError(f"Unhandled command: {args.command}")
+    print("Unexpected error: unknown command")
+    return 1
 
 
 if __name__ == "__main__":

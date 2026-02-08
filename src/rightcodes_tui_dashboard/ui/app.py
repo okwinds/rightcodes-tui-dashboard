@@ -24,6 +24,7 @@ from rightcodes_tui_dashboard.services.backoff import compute_next_retry_at
 from rightcodes_tui_dashboard.services.calculations import (
     BurnRate,
     extract_advanced_buckets,
+    extract_me_balance,
     extract_model_usage_rows,
     extract_stats_totals,
     extract_use_logs_items,
@@ -42,6 +43,7 @@ from rightcodes_tui_dashboard.services.use_logs import (
     format_billing_rate,
     format_billing_source,
 )
+from rightcodes_tui_dashboard import __version__
 
 
 @dataclass
@@ -218,6 +220,12 @@ class DashboardScreen(Screen):
             self._render_from_cache()
             self._update_status()
             return
+        except Exception as e:
+            self._set_banner(f"刷新失败：{e.__class__.__name__}", kind="error")
+            self._stale_since = self._stale_since or dt.datetime.now()
+            self._render_from_cache()
+            self._update_status()
+            return
 
         # OK
         self._cached = data
@@ -225,7 +233,13 @@ class DashboardScreen(Screen):
         self._stale_since = None
         self._backoff = BackoffState()
         self._set_banner("", kind="info")
-        self._render_view(data)
+        try:
+            self._render_view(data)
+        except Exception as e:
+            # 防御性兜底：渲染失败不应导致任务异常或 UI 崩溃。
+            self._set_banner(f"渲染失败：{e.__class__.__name__}", kind="error")
+            self._stale_since = self._stale_since or dt.datetime.now()
+            self._render_from_cache()
         self._update_status()
 
     def _fetch_data(self) -> dict[str, Any]:
@@ -243,6 +257,7 @@ class DashboardScreen(Screen):
             granularity = "hour" if self._range_seconds <= 48 * 3600 else "day"
 
         with RightCodesApiClient(base_url=self._base_url, token=self._token) as client:
+            me = client.get_me()
             subs = client.list_subscriptions()
             adv_rate = client.stats_advanced(start_date=start_rate, end_date=end_now, granularity="hour")
             adv_trend = client.stats_advanced(start_date=start_range, end_date=end_now, granularity=granularity)
@@ -259,6 +274,7 @@ class DashboardScreen(Screen):
                 # /use-log/list 属于“非关键”区块：接口变更时不应阻塞主面板刷新。
                 use_logs = {}
             return {
+                "me": me,
                 "subscriptions": subs,
                 "advanced_rate": adv_rate,
                 "advanced_trend": adv_trend,
@@ -267,9 +283,11 @@ class DashboardScreen(Screen):
             }
 
     def _render_static_placeholders(self) -> None:
-        self.query_one("#quota_overview", Static).update(
-            Group(Text("余额：—", style="dim"), _quota_overview_line("— / —  ", None, width=10))
-        )
+        header = Table.grid(expand=True)
+        header.add_column(justify="left")
+        header.add_column(justify="right")
+        header.add_row(Text("余额：—", style="dim"), Text(f"ver: {__version__}", style="dim"))
+        self.query_one("#quota_overview", Static).update(Group(header, _quota_overview_line("— / —  ", None, width=10)))
         self.query_one("#subscriptions", Static).update("套餐：—")
         self.query_one("#details_by_model", Static).update("详细统计数据：—")
         self.query_one("#use_logs", Static).update("使用记录明细：—")
@@ -318,7 +336,9 @@ class DashboardScreen(Screen):
         self._burn_cached = burn
         self._update_eta_targets(quota_remaining=quota.remaining_sum, burn=burn, now=now)
 
-        self._render_quota_overview(quota_label, quota_pct, balance=quota.remaining_sum)
+        me_payload = data.get("me") if isinstance(data.get("me"), dict) else {}
+        balance = extract_me_balance(me_payload)
+        self._render_quota_overview(quota_label, quota_pct, balance=balance)
 
         self.query_one("#burn_eta", Static).update(self._format_burn_eta_block(now))
 
@@ -344,13 +364,11 @@ class DashboardScreen(Screen):
             reset_today = _reset_today_label(s.reset_today)
 
             if effective is None:
-                quota_line = "额度：—"
+                quota_line = "—"
                 used_pct_text = "—"
                 bar = _bar_text(None, width=28, dim=True)
             else:
-                quota_line = (
-                    f"额度：{_fmt_money(effective.remaining_effective)} / {_fmt_money(effective.total_effective)}"
-                )
+                quota_line = f"{_fmt_money(effective.remaining_effective)} / {_fmt_money(effective.total_effective)}"
                 used_pct_text = _fmt_pct_short(effective.used_pct)
                 bar = _bar_text(effective.used_pct, width=28, dim=False)
 
@@ -384,8 +402,14 @@ class DashboardScreen(Screen):
 
         host = self.query_one("#quota_overview", Static)
         width = max(8, host.size.width - 2)  # 扣掉左右 padding（对齐套餐区域）
-        balance_text = "余额：—" if balance is None else f"余额：{_fmt_money(balance)}"
-        host.update(Group(Text(balance_text, style="bold"), _quota_overview_line(f"{label}  ", pct, width=width)))
+        balance_text = "余额：—" if balance is None else f"余额：{_fmt_money_balance(balance)}"
+
+        header = Table.grid(expand=True)
+        header.add_column(justify="left")
+        header.add_column(justify="right")
+        header.add_row(Text(balance_text, style="bold"), Text(f"ver: {__version__}", style="dim"))
+
+        host.update(Group(header, _quota_overview_line(f"{label}  ", pct, width=width)))
 
     def _render_details_by_model(self, data: dict[str, Any]) -> None:
         """渲染“详细统计数据”（按模型汇总表格，含合计行）。"""
@@ -600,8 +624,13 @@ class DashboardScreen(Screen):
             f"Burn: {tph}   成本速率: {cph}",
             f"ETA: {eta}  (倒计时 {countdown})",
             f"≈ 剩余 Token（按近窗口均价估算）: {remaining_tokens_est}",
+            "github: okwinds/rightcodes-tui-dashboard",
         ]
-        return Text("\n".join(lines))
+        t = Text()
+        t.append("\n".join(lines[:-1]))
+        t.append("\n")
+        t.append(lines[-1], style="dim")
+        return t
 
     def _update_burn_eta_live(self) -> None:
         """每秒更新倒计时（不触发任何网络请求）。"""
@@ -702,10 +731,18 @@ class LogsScreen(Screen):
             self.query_one("#logs_banner", Static).update(f"刷新失败：{e}")
             self._render_view(self._cached or [])
             return
+        except Exception as e:
+            self.query_one("#logs_banner", Static).update(f"刷新失败：{e.__class__.__name__}")
+            self._render_view(self._cached or [])
+            return
 
         self.query_one("#logs_banner", Static).update("")
         self._cached = items
-        self._render_view(items)
+        try:
+            self._render_view(items)
+        except Exception as e:
+            self.query_one("#logs_banner", Static).update(f"渲染失败：{e.__class__.__name__}")
+            self._render_view(self._cached or [])
 
     def _fetch_logs(self) -> list[dict[str, Any]]:
         now = dt.datetime.now()
@@ -1030,6 +1067,16 @@ def _fmt_money(value: float) -> str:
     if abs(num - round(num)) < 1e-9:
         return f"${int(round(num)):,}"
     return f"${num:,.5f}"
+
+
+def _fmt_money_balance(value: float) -> str:
+    """格式化顶部“余额”显示（尽量不吞尾数，便于人工核对字段是否正确）。"""
+
+    num = float(value)
+    # 余额通常较小且带小数；这里保留更多位并去掉多余 0。
+    text = f"{num:,.8f}"
+    text = text.rstrip("0").rstrip(".")
+    return f"${text}"
 
 
 def _fmt_cost_or_dash(value: float | None) -> str:

@@ -8,6 +8,7 @@ from rightcodes_tui_dashboard.services.calculations import (
     calculate_burn_rate,
     compute_effective_quota,
     estimate_eta,
+    extract_me_balance,
     extract_model_usage_rows,
     normalize_subscriptions,
     summarize_quota,
@@ -110,3 +111,11 @@ def test_extract_model_usage_rows_prefers_cost_share() -> None:
     assert rows[0].share_basis == "cost"
     assert rows[0].share == pytest.approx(0.9)
     assert rows[1].share == pytest.approx(0.1)
+
+
+def test_extract_me_balance_prefers_balance_field() -> None:
+    assert extract_me_balance({"balance": 5.71234}) == pytest.approx(5.71234)
+
+
+def test_extract_me_balance_parses_numeric_string() -> None:
+    assert extract_me_balance({"balance": "5.700100"}) == pytest.approx(5.7001)
