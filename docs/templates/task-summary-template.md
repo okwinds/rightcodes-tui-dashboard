@@ -1,6 +1,6 @@
 # Task Summary Template (Universal)
 
-> 把本文件复制一份作为每次结项总结，并在 `DOCS_INDEX.md` 登记。
+> 把本文件复制一份作为每次结项总结，并在 `docs/INDEX.md` 登记。
 
 ---
 
@@ -81,5 +81,4 @@
 
 ## 8) Doc Index Update
 
-- 已在 `DOCS_INDEX.md` 登记：是 / 否
-
+- 已在 `docs/INDEX.md` 登记：是 / 否

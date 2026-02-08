@@ -16,7 +16,7 @@
 
 并满足硬约束：
 - 不使用 Playwright 自动化登录
-- 密码不落盘；token 优先 keyring，失败兜底写入 `rightcodes-tui-dashboard/.local/token.json`（尽量 `0600`）
+- 密码不落盘；token 优先 keyring，失败兜底写入“全局数据目录”的 `token.json`（尽量 `0600`；支持 `RIGHTCODES_DATA_DIR` 覆盖）
 - 401/429/字段缺失可降级（保留 stale 数据并提示下一步）
 
 ---
@@ -65,7 +65,6 @@
 离线回归（不需要外网/账号）：
 
 ```bash
-cd rightcodes-tui-dashboard
 python3 -m pip install -e '.[dev]'
 python3 -m pytest
 ```
@@ -89,3 +88,16 @@ python3 -m pytest
   - advanced buckets 是否带时间字段（可用于更精准的 rate-window slicing）
 - 按你的偏好调整面板信息密度与显示项（例如 cost/token 分布、按天/小时切换）。
 
+---
+
+## Update（2026-02-08：MVP 后续迭代摘要）
+
+> 说明：本任务总结记录的是 MVP 交付当日的主要落地；后续 `v0.1.x` 已在开源分发与 UX 上继续迭代：
+
+- 目录结构：当前仓库根目录即项目根目录；早期文档中的 `rightcodes-tui-dashboard/` 前缀可忽略。
+- token 存储：
+  - keyring 优先；失败降级到“全局数据目录” `token.json`（跨目录可用）
+  - 兼容读取旧版 `.local/token.json` 并迁移复制
+- `rightcodes dashboard`：
+  - 未登录或 token 过期时不直接报错退出，会进入交互式登录流程
+  - Dashboard 内增加“使用记录明细”表格，并支持 `p/n` 翻页提示

@@ -127,6 +127,7 @@ rightcodes --help
 
 ## 相关文档
 
+- 文档索引（可提交）：`docs/INDEX.md`
 - MVP 规格：`docs/specs/tui-dashboard-mvp.md`
 - 可行性方案：`docs/plans/2026-02-07-rightcodes-cli-dashboard-feasibility.md`
 - 实现计划：`docs/plans/2026-02-07-tui-dashboard-implementation-plan.md`

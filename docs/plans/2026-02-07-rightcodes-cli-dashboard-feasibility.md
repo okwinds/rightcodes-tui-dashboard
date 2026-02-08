@@ -1,7 +1,11 @@
 # Right.codes CLI 实时看板（无 Playwright）技术可行性方案
 
 日期：2026-02-07  
-目标：把 `https://right.codes/dashboard` 的核心用量/套餐信息做成一个本地 CLI/TUI 看板，可配置刷新频次，尽量不依赖浏览器。
+目标：把 `right codes` 网页看板的核心用量/套餐信息做成一个本地 CLI/TUI 看板，可配置刷新频次，尽量不依赖浏览器。
+
+更新（2026-02-08）：
+- 已落地为可 pip 安装的 CLI/TUI 工具，并发布多个 `v0.1.x` 版本。
+- token 存储已支持 keyring 优先 + 全局数据目录 `token.json` 兜底（跨目录可用）。
 
 ## 1. 需求摘要
 

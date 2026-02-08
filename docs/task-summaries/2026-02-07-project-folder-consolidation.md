@@ -1,5 +1,8 @@
 # 任务总结：项目产物收敛到子目录
 
+> 备注（2026-02-08）：这是一次早期目录收敛尝试的历史记录。当前仓库根目录已作为项目根目录继续维护，
+> 不再要求存在 `rightcodes-tui-dashboard/` 子目录；文档中出现的该前缀可忽略。
+
 ## 1) Goal / Scope
 
 - Goal：将 Right.codes CLI Dashboard 现有产物收敛到单一项目子目录 `rightcodes-tui-dashboard/`，并在仓库根目录保留最小 stub（跳转说明）。
@@ -80,4 +83,3 @@
 ## 8) Doc Index Update
 
 - 已在 `rightcodes-tui-dashboard/DOCS_INDEX.md` 登记：是（目录项已覆盖，且本次未新增必须单列的核心文档）。
-

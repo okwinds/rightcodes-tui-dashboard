@@ -3,6 +3,10 @@
 > 用途：工作记录（append-only）。  
 > 规则：记录关键命令、结论与决策；不记录敏感信息（API key、token、私密数据），必要时用 `***` 占位。
 
+> 备注：
+> - 本仓库不提交根目录 `DOCS_INDEX.md`（仅本地使用）；对外可提交的文档导航请见 `docs/INDEX.md`。
+> - `2026-02-07` 部分记录包含 `rightcodes-tui-dashboard/` 前缀，这是当时目录试验的历史痕迹，当前仓库根目录即项目根目录。
+
 ---
 
 ## Log Entry (copy/paste per step)
@@ -218,6 +222,54 @@
 ---
 
 ### Improve: 订阅（套餐包）展示口径 + 环形图卡片 + 修复过期测试
+
+---
+
+## 2026-02-08
+
+### Release: v0.1.x 连续迭代（开源可用性 + 健壮度）
+
+- When: `2026-02-08`
+- Who: `agent`
+- Context: 在开源分发（pip 安装）场景下补齐可用性、健壮度与帮助信息；并多次小版本发布。
+
+#### Key Decisions
+
+- Decision: token 存储从“项目目录 `.local/`”升级为“全局数据目录（或 keyring）”，实现跨目录可用。
+  - Why: `pip install` 后用户会在任意目录运行；项目目录不可定位，必须全局化。
+- Decision: `rightcodes dashboard` 未登录或 token 过期时不直接崩溃退出，进入交互式登录流程获取新 token。
+  - Why: 提升健壮度与使用体验，避免“需要手动先跑 login 才能进 dashboard”的割裂。
+- Decision: “使用记录明细”表格中 IP 允许全量展示（个人工具场景），密钥保持打码。
+
+#### Commands run（代表性）
+
+- `python3 -m pytest`
+- `rightcodes --help`
+- `rightcodes --version`
+
+#### Result
+
+- Outcome: 发布至 `v0.1.13`；CLI/TUI 在未登录、token 失效、字段缺失与 429 场景下具备更可解释的降级行为。
+
+### Docs: 规格与计划对齐当前实现
+
+- When: `2026-02-08`
+- Who: `agent`
+- Context: 修正并重构 specs/plans/task summaries，使其与 `v0.1.x` 当前实现一致，便于维护与复现。
+
+#### Action
+
+- Files touched:
+  - `docs/specs/tui-dashboard-mvp.md`
+  - `docs/specs/2026-02-08-add-gitignore.md`
+  - `docs/plans/2026-02-07-tui-dashboard-implementation-plan.md`
+  - `docs/task-summaries/2026-02-08-dashboard-ui-polish-and-use-logs.md`
+  - `docs/task-summaries/2026-02-08-add-gitignore.md`
+  - `docs/worklog.md`
+
+#### Result
+
+- Outcome: 文档契约与现状一致；新增/更新内容不包含敏感信息，且对 `pip install` 使用方式有明确说明。
 
 - When: `2026-02-07 20:29`
 - Who: `agent`

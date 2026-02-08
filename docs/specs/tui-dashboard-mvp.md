@@ -1,30 +1,30 @@
-# TUI Dashboard MVP 规格（Spec-Driven + TDD）
+# Right.codes CLI/TUI Dashboard 规格（v0.1.x：可降级、可复现、可离线回归）
 
-日期：2026-02-07  
-状态：Draft（可实现级别；接口字段以“可降级适配”为前提）
+更新时间：2026-02-08  
+状态：Implemented（以 `main` + 最新 tags 为准；字段兼容以“可降级适配”为前提）
 
-> 本文是 Right.codes 本地 CLI/TUI 看板 MVP 的主规格文档：先定义目标、约束、契约与验收，再进入测试与实现。
+> 本文是项目的“当前规格文档”（Spec-Driven）：描述目标、硬约束、接口契约、CLI/UI 行为与验收口径。
 
 ---
 
 ## 1) Goal / Non-goals
 
-### Goal（MVP 必须交付）
+### Goal（必须交付）
 
-- 提供一个离线可运行的 **CLI + TUI**，用于查看 Right.codes 的：
-  - 套餐额度（总额度/已用/剩余 + 获得时间 + 逐套餐明细）
-  - 近期使用速率（burn rate：tokens/小时、cost/天 等）
-  - 预计用光时间（ETA：基于速率的线性估算）
-  - 使用记录明细（最近 N 条，可分页/时间范围）
-- 支持 `--watch` 自动刷新，且在接口 401/429/字段缺失时能 **清晰提示并降级展示**（保留旧数据）。
-- 交付最少一套 **离线单测（pytest）**，覆盖核心计算、错误映射、退避状态机与模型兼容（字段缺失/变体）。
+- 提供离线可安装的 **CLI + TUI**，用于查看 `right codes` 的：
+  - **余额**（来自 `/auth/me` 的字段变体；用于顶部展示，保留小数尾数用于校验字段正确性）
+  - **套餐额度**（逐套餐卡片 + 总览进度条：已用/总额/百分比）
+  - **近期消耗速率（Burn）与预计用光时间（ETA）**
+  - **使用记录明细**（来自 `/use-log/list`，支持翻页）
+- 支持 `dashboard --watch` 自动刷新；对 401/429/字段缺失等场景 **清晰提示并降级展示**（保留旧数据，不崩溃）。
+- “全局只登录一次”：token 持久化到 **全局数据目录**（或 keyring）后，在任意目录都可运行。
+- 交付 **离线单测（pytest）** 作为完成门槛：覆盖解析兼容、错误映射、退避、token 存储与关键 UI 布局护栏。
 
-### Non-goals（MVP 不做或弱化）
+### Non-goals（不做或弱化）
 
-- 不做任何基于浏览器的自动化（尤其不使用 Playwright）。
-- 不追求 1:1 复刻网页 UI；优先信息密度、可读性与可维护性。
-- 不做复杂筛选器/多标签编辑器级交互；保持单屏为主（logs 允许单独命令/屏）。
-- 不做“自动重登”（需要密码持久化会触发安全约束）；401 仅引导重新登录。
+- 不使用 Playwright（只走 JSON 接口 + Bearer token）。
+- 不保存密码（仅交互式输入用于换取 token）。
+- 不追求 1:1 复刻网页 UI；优先信息密度、可读性、可维护性、容错与降级。
 
 ---
 
@@ -33,36 +33,34 @@
 ### 2.1 工程与依赖
 
 - Python：`>=3.9`
-- TUI：`Textual`
+- TUI：Textual（渲染层）
+- CLI：`argparse`
 - HTTP：`httpx`
-- 数据建模：`pydantic`（建议再配合 `pydantic-settings`）
-- 重试/退避：MVP 自实现（指数退避 + jitter），不强依赖 `tenacity`
+- 测试：`pytest`（离线回归必须可运行）
 - 可选依赖：
-  - `keyring`：用于系统安全存储 token（可选；无则降级到本地兜底文件）
-  - `platformdirs`：用于跨平台定位用户目录（可选；MVP 未强依赖）
-- 测试：`pytest` + `respx`（离线 mock HTTP）
+  - `keyring`：用于系统安全存储 token（可选；无则降级到文件）
 
 ### 2.2 安全与隐私
 
-- 禁止提交任何敏感信息：账号密码、`user_token`、cookie、内部链接、真实明细数据。
-- **密码不落盘**：
+- 禁止提交敏感信息：账号密码、token、cookie、真实明细数据。
+- 密码不落盘：
   - 仅允许交互式输入（不回显）用于换取 token。
-  - 不允许把密码写入配置文件/日志/trace。
-- token 存储优先级：
-  1) 系统安全存储（如 keyring；可选依赖）
-  2) 本地兜底文件：仅允许写到 `rightcodes-tui-dashboard/.local/` 下，并确保权限 `chmod 600`
+- token 存储优先级（实现约束）：
+  1) keyring（可选依赖；可用则优先）
+  2) 本地文件（兜底）：写入“全局应用数据目录”的 `token.json`
+     - 目录可通过环境变量 `RIGHTCODES_DATA_DIR` 覆盖（便于用户自定义/测试）
+     - 文件权限尽量设置为 `0600`
+  3) 兼容读取旧版项目目录 `.local/token.json`（如存在则复制迁移到全局目录；不删除旧文件）
 
 ### 2.3 可靠性与降级
 
-- 不使用 Playwright。
-- 接口字段可能变动：必须支持 **字段缺失** 的降级（例如某些字段为 `null`/不存在/改名）。
+- 接口字段可能变动：必须支持字段缺失/变体的降级展示（例如 `null`/不存在/改名）。
 - 对 401/403（token 失效）：
-  - UI/CLI 显示明确错误与“下一步怎么做”（例如提示执行 `rightcodes login`）
-  - 不崩溃；可继续查看上次缓存（stale）
+  - `rightcodes dashboard`：**不得直接报错退出**，应进入 `login` 流程获取新 token（交互式输入，仍不保存密码）。
+  - `rightcodes logs/doctor`：提示先执行 `rightcodes login`（保持简单明确）。
 - 对 429（限流）：
-  - 使用指数退避（exponential backoff）+ jitter（轻抖动）
-  - 显示下一次重试时间
-  - 保留 stale 数据并标记“数据已过期/正在退避”
+  - 使用指数退避（exponential backoff）+ jitter
+  - UI 显示下一次重试时间；保留 stale 数据并标记“正在退避”
 
 ---
 
@@ -70,193 +68,159 @@
 
 ### 3.1 Base URL 与鉴权
 
-- 默认 `base_url`：`https://right.codes`（需可通过配置/环境变量覆盖）
-- 鉴权头：
-  - `Authorization: Bearer <user_token>`
-- 注意：登录响应字段存在变体：
-  - `user_token` 或 `userToken`（两者任意其一存在即可）
+- 默认 `base_url`：`https://right.codes`（可通过 `--base-url` 覆盖）
+- 鉴权头：`Authorization: Bearer <user_token>`
+- 登录响应字段兼容：
+  - `user_token` 或 `userToken`（任意其一存在即可）
 
-### 3.2 时间参数格式（约定）
+### 3.2 时间参数格式
 
-- `start_date` / `end_date`：`YYYY-MM-DDTHH:mm:SS`（秒级，不带时区偏移）
-- 客户端内部统一使用本地时区/系统时间；显示时明确“本地时间”。
+- `start_date/end_date`：`YYYY-MM-DDTHH:mm:SS`（秒级）
+- 客户端内部使用本地时间范围计算；UI 展示使用本地时间格式化（解析失败则回退原字符串）。
 
-### 3.3 端点清单（MVP 使用）
-
-> 以下仅列出 MVP 必需字段；其它字段一律允许存在且应被忽略（forward compatible）。
+### 3.3 端点清单（按功能）
 
 #### Auth
 
 1) `POST /auth/login`
-- Body（JSON）：
-  - `username: string`
-  - `password: string`
-- Response（JSON object）：
-  - `user_token?: string`
-  - `userToken?: string`
+- Body：`{ username: string, password: string }`
+- Response：`{ user_token?: string, userToken?: string, ... }`
 
 2) `GET /auth/me`
-- Header：`Authorization: Bearer ...`
-- Response（JSON object）：
-  - 不强依赖具体字段；仅要求“返回 JSON object 且 HTTP 200 表示 token 有效”
-  - 建议记录 `keys`（仅字段名，不记录值）用于 `doctor`
+- 用途：校验 token 有效性；提取余额字段变体用于顶部展示
+- 余额字段兼容候选（可用即展示）：`balance` / `wallet_balance` / `wallet` / `credit_balance` / `remaining_balance`
 
-#### Subscriptions（额度/套餐）
+#### Subscriptions（套餐/额度）
 
 3) `GET /subscriptions/list`
-- Header：`Authorization: Bearer ...`
-- Response（JSON object）：
-  - `subscriptions: array<object>`
-    - 每个 item（仅 MVP 依赖字段，允许缺失）：
-      - `total_quota?: number`
-      - `remaining_quota?: number`
-      - `reset_today?: boolean`
-      - `tier_id?: string | number`（MVP 默认不展示，仅用于调试/定位）
-      - 时间字段（仅展示，不用于过滤/汇总口径）：
-        - `created_at?: string` / `obtained_at?: string`：获得/授予时间（ISO-like）
-        - `expired_at?: string`：到期时间（ISO-like）
+- Response：`{ subscriptions: array<object>, ... }`
+- 每个 item 兼容字段（缺失则降级）：
+  - `total_quota?: number`
+  - `remaining_quota?: number`
+  - `reset_today?: boolean`
+  - 时间字段（仅展示，不做业务推断）：`created_at?/obtained_at?`、`expired_at?`
 
-#### Usage Stats（统计）
+#### Usage Stats（统计/趋势）
 
-4) `GET /use-log/stats/overall`
-- Header：`Authorization: Bearer ...`
-- Response（JSON object）：
-  - 允许字段不确定；MVP 只要求能读取“累计 tokens / 累计 cost / 累计请求数”中的任意子集并展示可用部分
-  - 推荐兼容字段集合（任意存在即可）：
-    - tokens：`total_tokens` | `tokens` | `token_count`
-    - cost：`total_cost` | `cost` | `amount`
-    - requests：`total_requests` | `requests` | `request_count`
+4) `GET /use-log/stats/overall`（累计）
+5) `GET /use-log/stats`（区间）
+- 兼容字段（可用即展示）：
+  - tokens：`total_tokens` / `tokens` / `token_count`
+  - cost：`total_cost` / `cost` / `amount`
+  - requests：`total_requests` / `requests` / `request_count` / `request_count_total`
 
-5) `GET /use-log/stats`
-- Query：
-  - `start_date: string`
-  - `end_date: string`
-- Response（JSON object）：
-  - 同 `overall`：字段不确定，按“可用即展示”原则解析
+6) `GET /use-log/stats/advanced`（趋势/按模型）
+- Query：`start_date/end_date/granularity(hour|day)`
+- buckets 容器字段兼容候选：`data` / `items` / `series` / `buckets` / `trend`
+- bucket 内字段兼容候选：
+  - 时间：`time` / `ts` / `timestamp` / `date`
+  - tokens：`tokens` / `total_tokens` / `token_count`
+  - cost：`cost` / `total_cost` / `amount`
+  - requests：`requests` / `request_count` / `request_count_total`
+- 按模型聚合（可选，缺失则不展示）：`details_by_model[]`
 
-6) `GET /use-log/stats/advanced`
-- Query：
-  - `start_date: string`
-  - `end_date: string`
-  - `granularity: "hour" | "day"`
-- Response（JSON object）：
-  - 必须能导出一个“时间序列 buckets”用于计算速率与绘制趋势
-  - 允许服务端返回任意字段名与容器字段名；客户端做“多 shape 兼容”并在无法解析时降级为“无趋势/无法计算速率”
-  - 推荐兼容容器字段（从上到下尝试）：
-    - `data` | `items` | `series` | `buckets` | `trend`
-  - bucket 内推荐兼容字段（任意存在即可）：
-    - 时间：`time` | `ts` | `timestamp` | `date`
-    - tokens：`tokens` | `total_tokens`
-    - cost：`cost` | `total_cost` | `amount`
-    - requests：`requests` | `request_count`
-
-#### Use Logs（明细）
+#### Use Logs（使用记录明细）
 
 7) `GET /use-log/list`
-- Query：
-  - `page: number`
-  - `page_size: number`
-  - `start_date?: string`
-  - `end_date?: string`
-- Response（JSON object）：
-  - 推荐兼容字段集合（任意存在即可）：
-    - 列表：`items` | `logs` | `data`
-    - 分页：`page`、`page_size`、`total`（若缺失则仅按“是否还有数据”推断）
-  - item（日志明细）字段不稳定：MVP 仅用于“摘要展示”，默认不展示任何疑似敏感字段（见 Security & Privacy）
+- Query：`page/page_size/start_date?/end_date?`
+- 列表容器字段兼容候选：`items` / `logs` / `data`
+- item 兼容字段（可用即展示；缺失填 `—`）：
+  - 时间：`time/ts/timestamp/date/request_time/created_at`
+  - tokens：优先 `usage.total_tokens`，其次 `total_tokens/tokens/token_count/...`
+  - 渠道：`upstream_prefix/channel/source/provider/app/type/path/route`（不能写死）
+  - 倍率：`billing_rate/billing_multiplier/rate_multiplier/multiplier/ratio`（格式化为 `x1.00`）
+  - 资费：`billing_source/deduct_source/quota_source/deduct_from/balance_type/note`
+    - 若为 `subscription`：展示为“套餐”
+  - IP：`ip/client_ip/ip_address`（个人工具场景：UI 展示完整 IP，不做掩码）
 
 ---
 
 ## 4) CLI 设计（命令与参数）
 
-命令前缀统一为 `rightcodes`（最终包名/入口以实现为准）。
+统一入口：`rightcodes`
 
-### 4.1 `rightcodes login`
+### 4.1 全局参数
 
-用途：交互式输入账号密码换取 token，并写入安全存储。
+- `--version`：输出版本号并退出
+- `--help`：输出完整帮助（含最佳实践示例）
 
-- Options：
-  - `--base-url <url>`：覆盖 base_url
-  - `--store keyring|file|auto`（默认 `auto`：优先 keyring，失败则 file）
-  - `--print-token`：默认关闭；仅用于本地调试，输出必须打码（如仅显示前后 3 位），且不得写入 worklog
-- Behavior：
-  - 密码通过 `getpass` 输入，不回显
-  - 成功后打印“已登录/已保存 token（安全存储类型）”
-  - 失败时打印“原因 + 下一步建议”（例如检查 base_url、账号密码、网络）
+### 4.2 `rightcodes login`
 
-### 4.2 `rightcodes dashboard`
+- `--base-url <url>`
+- `--store auto|keyring|file`
+- `--print-token`：仅输出打码 token（不要写入文档/日志）
 
-用途：启动 TUI 看板（默认单屏）。
+### 4.3 `rightcodes dashboard`
 
-- Options：
-  - `--watch <duration>`：自动刷新间隔（如 `30s`、`60s`；默认 `30s`）
-  - `--range <duration>`：统计区间（如 `today`/`24h`/`7d`；默认 `today`）
-  - `--rate-window <duration>`：速率窗口（如 `6h`；默认 `6h`）
-  - `--granularity hour|day`：趋势粒度（默认自动：`range<=48h` 用 `hour`，否则 `day`）
-  - `--base-url <url>`
-  - `--no-keyring`：禁用 keyring（便于在无 keyring 环境运行）
+- `--watch <duration>`：`30s/5m/1h`；`0s` 关闭自动刷新
+- `--range today|24h|7d|...`：
+  - `today`：按本地日历日（00:00 起算）
+  - 其它：rolling window
+- `--rate-window <duration>`：用于 burn/ETA 估算
+- `--granularity auto|hour|day`
+- `--no-keyring`：禁用 keyring（强制走文件 token store）
 
-### 4.3 `rightcodes logs`
+### 4.4 `rightcodes logs`
 
-用途：以 CLI（非 TUI）输出或以 TUI 列表方式浏览明细（实现可二选一，MVP 建议复用 Textual Screen）。
+- `--range today|24h|7d|...`
+- `--page-size <n>` / `--page <n>`
+- `--format table|json`（默认 table；json 必须脱敏）
 
-- Options：
-  - `--range <duration>`：默认 `24h`（rolling window；用于 CLI logs）
-  - `--page-size <n>`：默认 `50`
-  - `--page <n>`：默认 `1`
-  - `--base-url <url>`
-  - `--format table|json`：默认 `table`；`json` 必须脱敏
+### 4.5 `rightcodes doctor`
 
-### 4.4 `rightcodes doctor`
-
-用途：离线/在线自检与契约探测（不包含任何敏感值），用于定位接口可用性与字段变体。
-
-- Options：
-  - `--base-url <url>`
-  - `--out <path>`：输出 JSON（默认写入 `rightcodes-tui-dashboard/.local/rightcodes-doctor.json`）
-  - `--no-save`：不落盘，仅输出 summary
-- Output（脱敏）：
-  - 各端点 HTTP 状态、耗时（可选）
-  - 返回 JSON 的 **字段名列表**（keys），不输出字段值
+- `--out <path>`：默认写入全局数据目录 `rightcodes-doctor.json`
+- `--no-save`：不落盘
 
 ---
 
 ## 5) UI 设计（Textual：单屏布局 + 交互）
 
-### 5.1 单屏布局（Dashboard Screen）
+### 5.1 Dashboard 布局（关键展示契约）
 
-- Header：标题 + 当前 base_url（可截断）+ token 状态（已登录/未登录）
-- Body（建议三段）：
-  1) **总览额度（单行进度条）**
-     - 单行三段：左侧 `$已用 / $总额`，中间进度条，右侧百分比文本
-     - 高度 1 行；左右 padding 与套餐卡片区域一致（对齐）
-     - ETA/burn 信息可在后续区块单独展示（避免把总览条挤成多行）
-  2) **Subscriptions Cards（逐套餐卡片）**
-     - 每包一个卡片：进度条（消耗进度）+ 文字标签（仿网页面板的“卡片”信息密度）
-     - 展示字段：
-       - 获得时间：`created_at/obtained_at`（可解析则格式化，否则展示原始字符串）
-       - 到期时间：`expired_at`（同上；字段存在但语义以实测为准）
-       - 今日重置：`reset_today`（已重置/未重置/—）
-       - 额度：`剩余 / 总额`（直接使用接口返回值，不引入运营规则推导）
-       - 已用比例：`used = max(0, total - remaining)`，`used% = used / total`
-     - 不展示 `tier_id`
-  2.5) **详细统计数据（按模型）**
-     - 表格列：模型 / 请求数 / Tokens / 费用（尽量保留完整小数位）/ 占比
-     - 占比优先按 cost 计算（若 cost 缺失则按 tokens）
-     - 底部追加“合计”行：总请求数 / 总 Tokens / 总费用（用于承载汇总指标）
-  2.6) **使用记录明细（最近 N 条）**
-     - 标题居中，表格带边框
-     - 表格列：时间 / 密钥 / 模型 / 渠道 / Tokens / 计费倍率 / 扣费来源 / 费用 / IP
-     - 为避免敏感信息暴露：密钥与 IP 默认做部分打码展示（CLI logs 仍保持默认脱敏策略）
-  3) **Usage & Trend（统计与趋势）**
-     - 累计/区间：tokens、cost、requests（可用即展示）
-     - 趋势：按 hour/day sparkline（tokens 或 cost；二者都可用则可切换）
-- Footer（状态栏）：
-  - `Last OK:` 最近一次成功刷新时间
-  - `Next refresh:` 下一次计划刷新时间
-  - `Backoff:` 若 429，显示 `next_retry_at` 与 `attempt`
-  - `Stale:` 当前展示是否为 stale（是/否 + stale 时长）
+- 顶部总览（两行）：
+  - 第一行：`余额：$<value>`（左对齐）+ `ver: x.y.z`（右对齐）
+  - 第二行：总进度条行：左侧以 `套餐：` 开头，与“余额：”左对齐
+- 套餐卡片区：每包展示“今日重置/获得时间/到期时间/额度/已用比例” + 进度条
+- 详细统计数据：按模型汇总表格（含“合计”行）
+- 使用记录明细：
+  - 表格列：时间 / 密钥 / 模型 / 渠道 / Tokens / 倍率 / 资费 / 费用 / IP
+  - 翻页：`p` 上一页 / `n` 下一页；表格下方右侧提示翻页方法与页码
+  - 信息密度：除“密钥/模型”外，其它列保留稳定的右侧留白（可读性）；“密钥/模型”获取更多宽度以减少截断
 
 ### 5.2 快捷键（必须）
+
+- `q`：退出
+- `r`：手动刷新
+- `p/n`：使用记录明细翻页
+- `?`：帮助
+
+---
+
+## 6) 验收标准（Acceptance Criteria）
+
+- `pip install rightcodes-tui-dashboard` 后可在任意目录运行：
+  - `rightcodes --version`
+  - `rightcodes --help`
+  - `rightcodes login`（交互式，不回显）
+  - `rightcodes dashboard`（未登录时会进入登录流程，不直接崩溃）
+- token 全局可用：在不同目录运行 `rightcodes dashboard` 不需要重复登录（除非 token 失效）。
+- `/use-log/list` 明细表中：
+  - `Tokens/渠道/倍率/资费` 均来自 JSON 字段映射（不能写死常量）
+  - `subscription` 显示为“套餐”
+- 401/429/字段缺失不会导致 TUI 崩溃，且有明确提示与可降级展示。
+
+---
+
+## 7) Test Plan（离线回归）
+
+- 运行离线回归：
+  - `python3 -m pytest`
+- 覆盖点（不依赖外网）：
+  - token store（keyring/file/legacy 迁移）
+  - CLI `--help/--version` 输出
+  - 字段变体解析（balance/tokens/channel/rate/source）
+  - use-log 时间格式化稳定性
+  - UI 文本布局护栏（避免空行/命名冲突）
 
 - `q`：退出
 - `r`：立即刷新（忽略 watch 定时，但仍受 backoff 限制）

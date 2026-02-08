@@ -15,7 +15,7 @@
 
 ## 3) Spec / Contract（文档契约）
 
-- Spec：`rightcodes-tui-dashboard/docs/specs/2026-02-08-add-gitignore.md`
+- Spec：`docs/specs/2026-02-08-add-gitignore.md`
 - Acceptance Criteria：`.gitignore` 包含上述忽略项。
 - Test Plan：离线校验 `.gitignore` 内容；若已是 Git 仓库可用 `git status --ignored` 复核。
 - 风险与降级（Risk/Rollback）：回滚 `.gitignore` 即可恢复原行为（但会增加误提交风险）。
@@ -31,10 +31,9 @@
 
 ### 4.2 Code Changes（按文件列）
 
-- `rightcodes-tui-dashboard/.gitignore`：新增忽略规则。
-- `rightcodes-tui-dashboard/docs/specs/2026-02-08-add-gitignore.md`：L1 简短 spec（Goal/AC/Test Plan）。
-- `rightcodes-tui-dashboard/docs/worklog.md`：追加工作记录。
-- `rightcodes-tui-dashboard/DOCS_INDEX.md`：登记新增文档与关键文件。
+- `.gitignore`：新增忽略规则（包含 `.local/`、`templates/`、`AGENTS.md`、`DOCS_INDEX.md` 等本地文件）。
+- `docs/specs/2026-02-08-add-gitignore.md`：L1 简短 spec（Goal/AC/Test Plan）。
+- `docs/worklog.md`：追加工作记录。
 
 ## 5) Verification（验证与测试结果）
 
@@ -66,4 +65,3 @@
 ## 8) Doc Index Update
 
 - 已在 `DOCS_INDEX.md` 登记：是
-

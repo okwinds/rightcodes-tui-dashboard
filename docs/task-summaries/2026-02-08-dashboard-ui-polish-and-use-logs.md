@@ -20,9 +20,9 @@
 
 ## Key Decisions
 
-1) **Dashboard 内展示使用记录明细但做部分打码**
-   - Why：表格列包含“密钥 / IP”，默认全明文会增加误泄露风险；同时又需要一定可辨识度便于排查。
-   - 方案：密钥保留前 2 + 末 4（其余省略）；IPv4 保留前两段，其余打码；其它格式走兜底打码。
+1) **Dashboard 内展示使用记录明细：密钥打码、IP 全量展示**
+   - Why：密钥属于敏感字段，默认全明文有误泄露风险；但 IP 在“个人工具 + 本地使用”场景下可完整展示以便排查。
+   - 方案：密钥做部分打码（保留前后片段 + 省略号）；IP 不做掩码。
 
 2) **主体内容统一放入 `VerticalScroll`**
    - Why：新增两张表后，在小窗口下容易溢出；滚动可避免为每个区块手动调高度。
@@ -31,13 +31,13 @@
 
 ## Code Changes
 
-- `rightcodes-tui-dashboard/src/rightcodes_tui_dashboard/ui/app.py`
+- `src/rightcodes_tui_dashboard/ui/app.py`
   - 新增 `#quota_overview`（替代 `#quota_summary/#quota_bar`），实现单行进度条渲染
   - “详细统计数据”改为居中标题 + `box.SQUARE` 边框表格
   - Dashboard `_fetch_data` 增加 `/use-log/list` 拉取（非关键区块，接口异常时降级为空）
-  - 新增“使用记录明细”表格渲染与字段兼容映射，并对密钥/IP 默认部分打码
+  - 新增“使用记录明细”表格渲染与字段兼容映射：`渠道/倍率/资费/Tokens/IP` 均从 JSON 字段提取（不写死）
 
-- `rightcodes-tui-dashboard/docs/specs/tui-dashboard-mvp.md`
+- `docs/specs/tui-dashboard-mvp.md`
   - 更新 UI 章节：补充“总览额度单行条”与“使用记录明细表”的展示契约
 
 ---
@@ -65,3 +65,15 @@ python3 -m pytest -q
 
 - 你登录后跑一次 `rightcodes dashboard`，确认“使用记录明细”各列字段映射是否需要微调（尤其是：渠道/计费倍率/扣费来源）。  
 
+---
+
+## Addendum（后续小迭代：表格信息密度与可读性）
+
+> 目的：在不折叠其它列的前提下，把“时间列浪费的留白”让给“密钥/模型”列，使密钥多显示 1 个字符左右，提升排查体验。
+
+- “使用记录明细”表格：
+  - 固定“时间”列宽度，避免 expand 导致右侧留白浪费
+  - 统一列右侧留白（除密钥/模型外），避免文本贴边
+  - 提高“密钥/模型”列宽度占比（ratio），减少截断
+  - 调整密钥打码策略：中等长度 key 更“可辨识”（多露出 1 个字符左右）
+  - 支持翻页：`p` 上一页 / `n` 下一页，并在表格下方提示操作

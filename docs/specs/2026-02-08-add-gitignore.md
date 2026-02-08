@@ -1,13 +1,17 @@
-# 新增 `.gitignore`：排除本地缓存与构建产物（L1）
+# 新增 `.gitignore`：排除本地文件/缓存/模板拷贝（L1）
 
 ## Goal
 
 - 为仓库添加最小可用的 `.gitignore`，避免把本机文件与测试/构建产物提交到 Git。
-- 本次先覆盖已出现的目录/文件：
+- 本次覆盖“已出现/高风险误提交”的目录/文件（以仓库根目录为准）：
   - `.DS_Store`
-  - `.local/`
+  - `.local/`（可能包含 token / doctor 输出）
   - `.pytest_cache/`
   - `*.egg-info/`
+  - `AGENTS.md`（本地协作约束文件；本仓库不提交）
+  - `DOCS_INDEX.md`（本地索引；本仓库不提交）
+  - `templates/`（本地模板拷贝；本仓库不提交）
+  - `截图.png`（本地截图；含个人数据，不提交）
 
 ## Constraints
 
@@ -23,11 +27,7 @@
 ## Acceptance Criteria
 
 - 仓库根目录存在 `.gitignore` 文件。
-- `.gitignore` 至少包含以下忽略项：
-  - `.DS_Store`
-  - `.local/`
-  - `.pytest_cache/`
-  - `*.egg-info/`
+- `.gitignore` 至少包含本次 Goal 列出的忽略项（允许比最小集更严格，但不得误伤 `src/`、`tests/`、`.github/` 等关键目录）。
 
 ## Test Plan
 
@@ -44,4 +44,3 @@
   - 断言 `.DS_Store`、`.local/`、`.pytest_cache/`、`*.egg-info/` 均被标记为 ignored。
 - 或 `git check-ignore -v <path>`：
   - 断言命中 `.gitignore` 中对应规则。
-
