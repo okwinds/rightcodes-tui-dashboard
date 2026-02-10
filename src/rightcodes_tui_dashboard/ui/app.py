@@ -7,6 +7,7 @@ from typing import Any
 
 from rich import box
 from rich.align import Align
+from rich.cells import cell_len
 from rich.columns import Columns
 from rich.console import Group
 from rich.panel import Panel
@@ -131,6 +132,17 @@ class DashboardScreen(Screen):
 
         if self._watch_seconds:
             self.set_interval(1.0, self._tick)
+
+    def on_resize(self, _: object) -> None:
+        """终端窗口变化时，使用缓存重绘（不触发网络请求）。"""
+
+        # 目标：让顶部总进度条/表格等在 terminal 宽窄变化时动态适配，不出现标签被顶出去。
+        try:
+            self._render_from_cache()
+            self._update_status()
+        except Exception:
+            # 防御性兜底：resize 不应导致 UI 崩溃。
+            pass
 
     async def _check_update_available(self) -> None:
         """后台检查是否有新版本（失败即忽略，不影响主功能）。"""
@@ -1086,21 +1098,33 @@ def _quota_overview_line(left_label: str, pct: float | None, *, width: int) -> T
     """渲染单行总览进度条：left label + bar + %。"""
 
     w = max(1, int(width))
-    right = "—" if pct is None else f"{float(pct) * 100.0:.0f}%"
+
+    # 右侧百分比标签必须“可见且稳定”，并预留至少 5 个英文字符位：
+    # - 1 个空格 + 4 个字符（最大 "100%"）
+    right_raw = "—" if pct is None else f"{float(pct) * 100.0:.0f}%"
+    right_padded = right_raw.rjust(4)
+    right_block = f" {right_padded}"  # cell width = 5（对齐+不被挤掉）
+
+    # 极窄场景：优先保证百分比可见（不强行塞进度条）。
+    if w <= cell_len(right_block):
+        t = Text()
+        t.append(_truncate_plain(right_padded, max(1, w)).rjust(max(1, w)), style="bold")
+        return t
 
     min_bar = 1
-    reserved = len(right) + 1 + min_bar
-    left_max = max(0, w - reserved)
-    left = _truncate_plain(left_label, left_max)
+    reserved = cell_len(right_block) + min_bar
+    left_max_cells = max(0, w - reserved)
 
-    bar_width = max(min_bar, w - len(left) - len(right) - 1)
+    left_text = Text(left_label, style="bold")
+    left_text.truncate(left_max_cells, overflow="ellipsis")
+
+    bar_width = max(min_bar, w - left_text.cell_len - cell_len(right_block))
     bar = _bar_text(pct, width=bar_width, dim=(pct is None))
 
     t = Text()
-    t.append(left, style="bold")
+    t.append_text(left_text)
     t.append_text(bar)
-    t.append(" ")
-    t.append(right, style="bold")
+    t.append(right_block, style="bold")
     return t
 
 

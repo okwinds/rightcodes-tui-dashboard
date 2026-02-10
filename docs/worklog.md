@@ -511,3 +511,25 @@
   - 在 `RightCodesDashboardApp` 覆写 `_watch_theme`：主题变更后额外触发一次 `refresh(repaint=True, layout=True)`（并刷新 screen），降低偶发残影概率。
   - 新增离线护栏测试：确保 `_watch_theme` 覆写存在，避免后续回归。
   - 离线回归通过（exit code 0）。
+
+### Fix: 顶部“套餐”总进度条随 terminal 宽度自适应，百分比不被挤出
+
+- When: `2026-02-10 10:35`
+- Who: `agent`
+- Context: 用户反馈顶部总进度条在 terminal 较窄时会把右侧百分比顶出去不可见；且进度条希望能随 terminal 宽窄动态变化。
+
+#### Action
+
+- Files touched:
+  - `rightcodes-tui-dashboard/src/rightcodes_tui_dashboard/ui/app.py`
+  - `rightcodes-tui-dashboard/tests/test_quota_overview_line_layout.py`
+  - `rightcodes-tui-dashboard/docs/specs/tui-dashboard-mvp.md`
+- Commands run:
+  - `python3 -m pytest -q`
+
+#### Result
+
+- Outcome:
+  - 顶部总进度条使用 cell-width 计算（兼容中文宽字符），并为右侧百分比预留 ` 100%` 的 5 列空间。
+  - 新增 resize 重绘：终端窗口变化时使用缓存重绘（不触发网络请求），使进度条/表格宽度实时适配。
+  - 离线回归通过（exit code 0）。
