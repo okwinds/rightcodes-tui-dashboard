@@ -95,7 +95,6 @@ class DashboardScreen(Screen):
         self._cached: dict[str, Any] | None = None
         self._burn_cached: BurnRate | None = None
         self._eta_target: dt.datetime | None = None
-        self._eta_remaining_tokens_est: float | None = None
         self._eta_mode: str | None = None
         self._degraded_reason: str | None = None
 
@@ -337,7 +336,6 @@ class DashboardScreen(Screen):
         self.query_one("#trend_tokens", Sparkline).data = []
         self._burn_cached = None
         self._eta_target = None
-        self._eta_remaining_tokens_est = None
         self._eta_mode = None
         self.query_one("#burn_eta", Static).update("Burn: —  ETA: —")
         self._update_status()
@@ -621,10 +619,9 @@ class DashboardScreen(Screen):
         return f"Burn: tokens/hour {tph}  cost/day {cpd}"
 
     def _update_eta_targets(self, *, quota_remaining: float | None, burn: BurnRate | None, now: dt.datetime) -> None:
-        """基于 burn + quota 剩余，计算 ETA 与“剩余 tokens 估算”（尽量酷但不误导）。"""
+        """基于 burn + quota 剩余，计算 ETA（cost mode）。"""
 
         self._eta_target = None
-        self._eta_remaining_tokens_est = None
         self._eta_mode = None
 
         if quota_remaining is None:
@@ -644,13 +641,6 @@ class DashboardScreen(Screen):
 
         self._eta_target = eta_cost
         self._eta_mode = "cost"
-
-        if burn.tokens_per_hour is None or burn.tokens_per_hour <= 0:
-            return
-        cost_per_token = cost_per_hour / burn.tokens_per_hour
-        if cost_per_token <= 0:
-            return
-        self._eta_remaining_tokens_est = quota_remaining / cost_per_token
 
     def _format_eta_time(self) -> str:
         if not self._eta_target:
@@ -680,10 +670,9 @@ class DashboardScreen(Screen):
             cph = f"{(burn.cost_per_day / 24.0):.4f}/h"
         eta = self._format_eta_time()
         countdown = self._format_eta_countdown(now)
-        remaining_tokens_est = "—" if self._eta_remaining_tokens_est is None else f"{self._eta_remaining_tokens_est:,.0f}"
 
         # 说明：
-        # - 左侧三行（Burn / ETA / 估算剩余 tokens）
+        # - 左侧两行（Burn / ETA）
         # - 右侧两行（github / 邀请码），需与左侧“逐行对齐”且不出现空行
         grid = Table.grid(expand=True)
         grid.add_column(justify="left")
@@ -696,10 +685,6 @@ class DashboardScreen(Screen):
         grid.add_row(
             Text(f"ETA: {eta}  (倒计时 {countdown})"),
             Text("right.codes 邀请码：4d98a8ea  加返5%", style="dim"),
-        )
-        grid.add_row(
-            Text(f"≈ 剩余 Token（按近窗口均价估算）: {remaining_tokens_est}"),
-            Text(""),
         )
         return grid
 
@@ -956,7 +941,7 @@ class HelpScreen(Screen):
                     "- 套餐时间字段：优先将 `created_at/obtained_at` 作为“获得时间”；将 `expired_at` 作为“到期时间”（仅展示，不用于过滤）",
                     "- Quota 汇总：按接口返回值直接汇总 total/remaining/used（不引入运营规则推导）",
                     "- Burn rate：基于 rate-window 的 advanced buckets，计算 tokens/hour 与成本速率（$/h）",
-                    "- ETA：优先按“剩余额度 ÷ $/h”估算；并给出“剩余 Token（按近窗口均价估算）”作为辅助参考",
+                    "- ETA：优先按“剩余额度 ÷ $/h”估算，并显示倒计时",
                 ]
             )
         )

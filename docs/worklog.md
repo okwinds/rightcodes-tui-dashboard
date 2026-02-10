@@ -533,3 +533,25 @@
   - 顶部总进度条使用 cell-width 计算（兼容中文宽字符），并为右侧百分比预留 ` 100%` 的 5 列空间。
   - 新增 resize 重绘：终端窗口变化时使用缓存重绘（不触发网络请求），使进度条/表格宽度实时适配。
   - 离线回归通过（exit code 0）。
+
+### Chore: 移除 Burn/ETA 区块的“剩余 Token 估算”行（UI 简化）
+
+- When: `2026-02-10 10:55`
+- Who: `agent`
+- Context: 用户反馈“≈ 剩余 Token（按近窗口均价估算）”长期不显示（多为 `—`），且该估算口径容易误导；决定移除该行，减少噪音。
+
+#### Action
+
+- Files touched:
+  - `rightcodes-tui-dashboard/src/rightcodes_tui_dashboard/ui/app.py`
+  - `rightcodes-tui-dashboard/tests/test_burn_eta_layout.py`
+  - `rightcodes-tui-dashboard/docs/specs/tui-dashboard-mvp.md`
+- Commands run:
+  - `python3 -m pytest -q`
+
+#### Result
+
+- Outcome:
+  - Burn/ETA 区块左侧仅保留两行：`Burn` 与 `ETA`（含倒计时）。
+  - 移除相关内部状态字段与测试断言，避免回归。
+  - 离线回归通过（exit code 0）。

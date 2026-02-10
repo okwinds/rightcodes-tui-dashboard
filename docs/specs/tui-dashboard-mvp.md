@@ -284,10 +284,7 @@
 
 第一版策略（避免误导）：
 - 若 `remaining_sum` 的单位更像“金额/余额”（网页 UI 通常显示为 `$`）：优先用 `burn_cost_per_hour` 估算 ETA。
-- 同时可附带一个“剩余 Token（按近窗口均价估算）”：
-  - `cost_per_token ≈ burn_cost_per_hour / burn_tokens_per_hour`
-  - `remaining_tokens_est ≈ remaining_sum / cost_per_token`
-  - **明确标注这是估算值**，仅用于粗略判断消耗速度。
+- 不展示“剩余 Token（按近窗口均价估算）”行：该估算容易长期为 `—` 且口径易误导，当前版本不再展示。
 
 MVP 策略（可配置、可降级）：
 - 默认：若 `remaining_sum` 与 `burn_tokens_per_hour` 可用，则：
