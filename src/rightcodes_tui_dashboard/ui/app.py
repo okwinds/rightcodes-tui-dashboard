@@ -24,6 +24,7 @@ from rightcodes_tui_dashboard.privacy import redact_sensitive_fields
 from rightcodes_tui_dashboard.services.backoff import compute_next_retry_at
 from rightcodes_tui_dashboard.services.calculations import (
     BurnRate,
+    build_subscriptions_display,
     extract_advanced_buckets,
     extract_me_balance,
     extract_model_usage_rows,
@@ -359,6 +360,11 @@ class DashboardScreen(Screen):
         subs_items = [x for x in subs_items if isinstance(x, dict)]
 
         normalized = normalize_subscriptions(subs_items, now=now)
+        subs_display = build_subscriptions_display(normalized)
+
+        # 说明：
+        # - quota / ETA 属于“当前/可用套餐”口径的一部分，但是否排除 expired 属于产品口径决策。
+        # - MVP 先修复 subscriptions 展示过滤与空态提示；quota 汇总仍按接口返回值直接汇总（不做过期过滤）。
         quota = summarize_quota(normalized)
         self._degraded_reason = quota.degraded_reason
 
@@ -386,17 +392,27 @@ class DashboardScreen(Screen):
 
         self.query_one("#burn_eta", Static).update(self._format_burn_eta_block(now))
 
-        self._render_subscriptions(normalized)
+        empty_hint: str | None = None
+        if subs_display.total_count > 0 and not subs_display.items:
+            parts: list[str] = []
+            if subs_display.expired_count:
+                parts.append(f"已过期 {subs_display.expired_count}")
+            if subs_display.unknown_count:
+                parts.append(f"状态未知 {subs_display.unknown_count}")
+            suffix = "，".join(parts) if parts else "无可用项"
+            empty_hint = f"无可用套餐（{suffix}）"
+
+        self._render_subscriptions(subs_display.items, empty_hint=empty_hint)
         self._render_details_by_model(data)
         self._render_use_logs(data)
         self._render_trend(data)
 
-    def _render_subscriptions(self, items) -> None:
+    def _render_subscriptions(self, items, *, empty_hint: str | None = None) -> None:
         """渲染 subscriptions（每包一个卡片 + 进度条）。"""
 
         host = self.query_one("#subscriptions", Static)
         if not items:
-            host.update("套餐：—")
+            host.update(empty_hint or "套餐：—")
             return
 
         cards: list[Any] = []
@@ -938,7 +954,7 @@ class HelpScreen(Screen):
                     "提示：右上角 `ver:` 前出现 `↑` 表示检测到新版本（非搅扰式提示）。",
                     "",
                     "口径（MVP）：",
-                    "- 套餐时间字段：优先将 `created_at/obtained_at` 作为“获得时间”；将 `expired_at` 作为“到期时间”（仅展示，不用于过滤）",
+                    "- 套餐时间字段：优先将 `created_at/obtained_at` 作为“获得时间”；将 `expired_at` 作为“到期时间”（用于判定过期并过滤展示；解析失败则视为状态未知）",
                     "- Quota 汇总：按接口返回值直接汇总 total/remaining/used（不引入运营规则推导）",
                     "- Burn rate：基于 rate-window 的 advanced buckets，计算 tokens/hour 与成本速率（$/h）",
                     "- ETA：优先按“剩余额度 ÷ $/h”估算，并显示倒计时",

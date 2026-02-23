@@ -5,6 +5,7 @@ import datetime as dt
 import pytest
 
 from rightcodes_tui_dashboard.services.calculations import (
+    build_subscriptions_display,
     calculate_burn_rate,
     compute_effective_quota,
     estimate_eta,
@@ -71,6 +72,62 @@ def test_normalize_subscriptions_splits_obtained_and_expires_time_fields() -> No
     assert s.obtained_at.isoformat(sep=" ", timespec="minutes") == "2026-02-07 19:20"
     assert s.expires_at is not None
     assert s.expires_at.isoformat(sep=" ", timespec="minutes") == "2026-03-09 19:20"
+
+
+def test_normalize_subscriptions_validity_prefers_explicit_status() -> None:
+    now = dt.datetime(2026, 2, 7, 12, 0, 0)
+    raw = [
+        {
+            "tier_id": 1,
+            "total_quota": 100,
+            "remaining_quota": 40,
+            "status": "expired",
+            "expired_at": "2026-12-31T00:00:00",
+            "reset_today": False,
+        }
+    ]
+    s = normalize_subscriptions(raw, now=now)[0]
+    assert s.validity == "expired"
+
+
+def test_normalize_subscriptions_validity_falls_back_to_expires_at() -> None:
+    now = dt.datetime(2026, 2, 7, 12, 0, 0)
+    raw_expired = [{"tier_id": 1, "expired_at": "2026-02-07T11:59:59"}]
+    raw_valid = [{"tier_id": 1, "expired_at": "2026-02-07T12:00:01"}]
+
+    s_expired = normalize_subscriptions(raw_expired, now=now)[0]
+    s_valid = normalize_subscriptions(raw_valid, now=now)[0]
+
+    assert s_expired.validity == "expired"
+    assert s_valid.validity == "valid"
+
+
+def test_normalize_subscriptions_validity_unknown_when_missing_or_unparseable() -> None:
+    now = dt.datetime(2026, 2, 7, 12, 0, 0)
+    raw_missing = [{"tier_id": 1}]
+    raw_unparseable = [{"tier_id": 1, "expired_at": "not-a-date"}]
+
+    s_missing = normalize_subscriptions(raw_missing, now=now)[0]
+    s_unparseable = normalize_subscriptions(raw_unparseable, now=now)[0]
+
+    assert s_missing.validity == "unknown"
+    assert s_unparseable.validity == "unknown"
+
+
+def test_build_subscriptions_display_filters_expired_and_unknown() -> None:
+    now = dt.datetime(2026, 2, 7, 12, 0, 0)
+    raw = [
+        {"tier_id": 1, "expired_at": "2026-02-07T12:00:01"},
+        {"tier_id": 2, "expired_at": "2026-02-07T11:59:59"},
+        {"tier_id": 3, "expired_at": "not-a-date"},
+    ]
+    items = normalize_subscriptions(raw, now=now)
+    display = build_subscriptions_display(items)
+
+    assert display.total_count == 3
+    assert display.expired_count == 1
+    assert display.unknown_count == 1
+    assert [s.tier_id for s in display.items] == ["1"]
 
 
 def test_burn_rate_and_eta_normal() -> None:

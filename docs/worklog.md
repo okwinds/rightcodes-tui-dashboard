@@ -118,6 +118,37 @@
   - `rightcodes-tui-dashboard/docs/worklog.md`
 - Commands run:
   - `date '+%Y-%m-%d %H:%M'`
+
+---
+
+## 2026-02-24
+
+### Bugfix: 过期套餐仍在面板显示（OpenSpec: fix-expired-package-display）
+
+- When: `2026-02-24 00:55`
+- Who: `agent`
+- Context: 面板 subscriptions 区域对套餐有效期未过滤，导致过期套餐仍显示为可用；引入 validity 判定与过滤，并补齐离线回归。
+
+#### Action
+
+- Files touched:
+  - `src/rightcodes_tui_dashboard/services/calculations.py`
+  - `src/rightcodes_tui_dashboard/ui/app.py`
+  - `tests/test_calculations.py`
+  - `openspec/changes/fix-expired-package-display/tasks.md`
+- Commands run:
+  - `openspec instructions apply --change "fix-expired-package-display" --json`
+  - `pytest -q`（首次因缺少 respx 失败；后安装依赖后通过）
+  - `python -m pip install "respx>=0.21"`
+
+#### Result
+
+- Outcome:
+  - 新增 `valid/expired/unknown` 判定：显式状态字段优先，其次 `expired_at` 到期时间比较，无法判定为 unknown（保守降级）。
+  - subscriptions 区域默认仅展示 validity=valid 的套餐；当无可用套餐但存在过期/未知项时显示清晰空态提示。
+  - 新增单测覆盖 validity 判定与过滤护栏；`pytest -q` 全绿。
+- Notes:
+  - 决策（OpenSpec task 3.2）：`quota/ETA` 不排除过期套餐，保持“按接口返回值直接汇总”的口径；仅在 subscriptions 卡片展示上做过滤与降级提示。
   - `python3 -m pytest`
 
 #### Decision

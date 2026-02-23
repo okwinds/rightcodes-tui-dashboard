@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
+
+SubscriptionValidity = Literal["valid", "expired", "unknown"]
 
 
 @dataclass(frozen=True)
@@ -10,6 +12,7 @@ class NormalizedSubscription:
     """归一化后的 subscription（字段缺失允许）。"""
 
     tier_id: str
+    validity: SubscriptionValidity
     total_quota: float | None
     remaining_quota: float | None
     reset_today: bool | None
@@ -17,6 +20,21 @@ class NormalizedSubscription:
     obtained_at: dt.datetime | None
     expires_at_raw: str | None
     expires_at: dt.datetime | None
+
+
+@dataclass(frozen=True)
+class SubscriptionsDisplay:
+    """面板展示用 subscriptions 视图模型（含过滤结果与统计）。
+
+    说明：
+    - `items`：用于“当前/可用套餐”区域展示的列表（默认只包含 `valid`）。
+    - `expired_count/unknown_count`：用于空态提示与降级展示。
+    """
+
+    items: list[NormalizedSubscription]
+    total_count: int
+    expired_count: int
+    unknown_count: int
 
 
 @dataclass(frozen=True)
@@ -78,7 +96,7 @@ def normalize_subscriptions(raw_items: Iterable[dict[str, Any]], *, now: dt.date
         now: 当前时间（本地时间；预留给未来的时间相关规则，MVP 目前不依赖）。
 
     Returns:
-        归一化结果列表。
+        归一化结果列表（包含 validity 判定）。
     """
 
     normalized: list[NormalizedSubscription] = []
@@ -92,7 +110,9 @@ def normalize_subscriptions(raw_items: Iterable[dict[str, Any]], *, now: dt.date
 
         # 说明：
         # - 网站面板同时展示“获得时间/到期时间”；但接口字段名与语义可能存在漂移。
-        # - MVP 采取“尽力解析 + 清晰展示”的策略：能解析就展示；不用于过滤。
+        # - 面板展示采用“尽力解析 + 清晰提示”的策略：
+        #   - 能解析就展示；
+        #   - 对于“当前/可用套餐”区域，需要基于字段判定 validity（见下方）。
         obtained_at_raw = None
         for k in ("created_at", "obtained_at"):
             v = item.get(k)
@@ -107,9 +127,12 @@ def normalize_subscriptions(raw_items: Iterable[dict[str, Any]], *, now: dt.date
             expires_at_raw = v.strip()
         expires_at = _safe_parse_datetime(expires_at_raw) if expires_at_raw else None
 
+        validity = _infer_subscription_validity(item, now=now, expires_at=expires_at)
+
         normalized.append(
             NormalizedSubscription(
                 tier_id=tier_id,
+                validity=validity,
                 total_quota=total_quota,
                 remaining_quota=remaining_quota,
                 reset_today=reset_today,
@@ -121,6 +144,109 @@ def normalize_subscriptions(raw_items: Iterable[dict[str, Any]], *, now: dt.date
         )
 
     return normalized
+
+
+def build_subscriptions_display(items: Iterable[NormalizedSubscription]) -> SubscriptionsDisplay:
+    """构建面板 subscriptions 区域的展示模型（含过滤与空态统计）。
+
+    Args:
+        items: 归一化后的套餐列表。
+
+    Returns:
+        SubscriptionsDisplay：
+        - `items` 默认仅保留 validity=valid 的套餐；
+        - 统计字段用于 UI 的空态/降级提示（避免把 unknown 误展示为“可用”）。
+    """
+
+    valid_items: list[NormalizedSubscription] = []
+    expired_count = 0
+    unknown_count = 0
+    total_count = 0
+
+    for s in items:
+        total_count += 1
+        if s.validity == "valid":
+            valid_items.append(s)
+        elif s.validity == "expired":
+            expired_count += 1
+        else:
+            unknown_count += 1
+
+    return SubscriptionsDisplay(
+        items=valid_items,
+        total_count=total_count,
+        expired_count=expired_count,
+        unknown_count=unknown_count,
+    )
+
+
+def _infer_subscription_validity(
+    item: dict[str, Any],
+    *,
+    now: dt.datetime,
+    expires_at: dt.datetime | None,
+) -> SubscriptionValidity:
+    """推导 subscription 的有效性（valid/expired/unknown）。
+
+    判定优先级：
+    1) 服务端显式状态字段优先（若能可靠判断）；
+    2) 回退到 `expires_at` 与 `now` 比较（解析失败则视为缺失）；
+    3) 其它情况为 unknown（保守降级，避免误判为可用）。
+
+    Args:
+        item: 原始 subscription JSON object。
+        now: 当前时间（与 `_safe_parse_datetime` 保持同一时区/口径：本地 naive datetime）。
+        expires_at: 从到期时间字段解析得到的时间（可能为 None）。
+
+    Returns:
+        SubscriptionValidity。
+    """
+
+    explicit = _extract_explicit_validity(item)
+    if explicit is not None:
+        return explicit
+
+    if expires_at is None:
+        return "unknown"
+    return "expired" if now >= expires_at else "valid"
+
+
+def _extract_explicit_validity(item: dict[str, Any]) -> SubscriptionValidity | None:
+    """从服务端返回的“显式状态字段”提取有效性。
+
+    说明：
+    - 该函数只在“能可靠判断”的情况下返回 valid/expired；
+      否则返回 None 让上层继续按 expires_at 回退或最终 unknown。
+    - 字段命名可能漂移，因此按常见变体做兼容。
+    """
+
+    # 1) 布尔：显式过期字段
+    for key in ("expired", "is_expired", "isExpired", "has_expired", "hasExpired"):
+        v = item.get(key)
+        if isinstance(v, bool):
+            return "expired" if v else "valid"
+
+    # 2) 布尔：显式有效字段（注意：False 代表“无效/不可用”，但无法区分 expired vs disabled）
+    for key in ("valid", "is_valid", "isValid", "active", "is_active", "isActive"):
+        v = item.get(key)
+        if isinstance(v, bool):
+            return "valid" if v else "expired"
+
+    # 3) 字符串：status/state
+    for key in ("status", "state", "subscription_status", "subscriptionState"):
+        raw = item.get(key)
+        if not isinstance(raw, str):
+            continue
+        text = raw.strip().lower()
+        if not text:
+            continue
+
+        if text in {"expired", "inactive", "disabled", "ended", "cancelled", "canceled"}:
+            return "expired"
+        if text in {"active", "valid", "enabled", "running", "ok"}:
+            return "valid"
+
+    return None
 
 
 def compute_effective_quota(item: NormalizedSubscription) -> EffectiveQuota | None:
