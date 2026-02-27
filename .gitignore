@@ -7,6 +7,9 @@
 # Local docs index (keep local; do not commit)
 /DOCS_INDEX.md
 
+# Local collaboration docs (keep local; do not commit)
+/docs/policies/
+
 # Local templates copy (keep local; do not commit)
 /templates/
 
